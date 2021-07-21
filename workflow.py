@@ -311,31 +311,69 @@ def da_prep_4_mf6_freyberg_seq(sync_state_names=True):
     pst.write(os.path.join(t_d,"freyberg6_run_da1.pst"),version=2)
     return pst
     
-def process_complex_target_output(c_d, s_d, i):
+def process_complex_target_output(c_d, s_d, real):
 
     sim = flopy.mf6.MFSimulation.load(sim_ws=c_d)
     m = sim.get_model("freyberg6")
     redis_fac = m.dis.nrow.data / 40
+    pst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
     
-    #load in obs ensemble
-    oe_f = pd.read_csv(os.path.join(c_d,"freyberg.0.obs.csv"),index_col=0)
-    obs_f = pst_f.observation_data
-    hds_f = obs_f.loc[obs_f.obsnme.apply(lambda x: x.startswith("hds")), :].copy()
-    hds_f.loc[:,"i"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    hds_f.loc[:,"org_i"] = (hds_f.i / redis_fac).apply(np.int)
+    start_date = pd.to_datetime('20151231', format = '%Y%m%d')
+    
+    # load in obs ensemble
+    oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
+    oe_f = oe_f.T
+    obs_f = pst.observation_data
+    
+    #process obs
+    hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
+    hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    time = hds_f.loc[:, "time"]
+    time = pd.to_timedelta(time.values-1, unit='D')
+    hds_f.loc[:, "org_time"] = start_date + time.values
+    hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac).apply(np.int)
     hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac).apply(np.int)
-    hds_f.loc[:,"org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}".format(x.k,x.org_i,x.org_j),axis=1)
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "trgw_{0}_{1}_{2}_{3}".format(x.k, x.org_i, x.org_j, x.org_time), axis=1)
+    
+    sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    type = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
+    type = pd.DataFrame(type)
+    type = type.replace('gage', 'gage_1')
+    sfr_f.loc[:, "type"] = type.values
+    time = sfr_f.loc[:, "time"]
+    time = pd.to_timedelta(time.values-1, unit='D')
+    sfr_f.loc[:, "org_time"] = start_date + time.values
+    sfr_f.loc[:, "org_time"] = sfr_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}_{1}".format(x.type, x.org_time), axis=1)
+    
+    pst = pyemu.Pst(os.path.join(s_d, 'freyberg6_run_ies.pst'))
+    obs_s = pst.observation_data
+    
+    for j in range(len(hds_f)):
+        for i in range(len(obs_s)):
+            if obs_s.obsnme[i] in hds_f.org_obgnme[j]:
+                obs_s.obsval[i] = hds_f.iloc[j, real]
 
-    grp_f = set(hds_f.org_obgnme.unique())
-    f = hds_f.loc[hds_f.org_obgnme == grp,:].copy()
-    f.sort_values(by="time",inplace=True)
-    oe_f_g = oe_f.loc[:, f.obsnme].copy()
+    for j in range(len(sfr_f)):
+        for i in range(len(obs_s)):
+            if obs_s.obsnme[i] in sfr_f.org_obgnme[j]:
+                obs_s.obsval[i] = sfr_f.iloc[j, real]
+                
+    #write pst files to master ies dir
+    m_ies_dir = os.path.join('simple_master_ies_{0}'.format(real))          
+    pst.write(os.path.join(m_ies_dir,"freyberg6_run_ies.pst"),version=2)
      
 def compare_mf6_freyberg():
     
     for ireal in range(100):
+        
+        process_complex_target_output(complex_dir, simple_dir, ireal)
+        
         #run batch and sequential simple models 
         # prep that prior ensemble for da
         da_test_d = "mf6_freyberg"
@@ -351,10 +389,8 @@ def compare_mf6_freyberg():
         par.loc["perlen","parval1"] = 100000
         #par.loc[~par.parnme.str.contains("head"),"partrans"] = "fixed"
           
-        ies_test_d = "mf6_freyberg"
-        ies_t_d = os.path.join(ies_test_d, "template")
-        org_ies_t_d = ies_t_d
-        ies_t_d = ies_t_d + "_compare"
+        m_ies_dir = os.path.join('simple_master_ies_{0}'.format(real)) 
+        org_dir
         if os.path.exists(ies_t_d):
             shutil.rmtree(ies_t_d)
         shutil.copytree(org_ies_t_d,ies_t_d)
