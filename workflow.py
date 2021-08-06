@@ -428,7 +428,7 @@ def balance_weights(ireal):
     ies_file = 'freyberg6_run_ies.pst'
     
     #run pestpp ies to get phi
-    pyemu.os_utils.run("pestpp-ies {0}".format(ies_file),cwd=ies_dir)
+    pyemu.os_utils.run("pestpp-ies.exe {0}".format(ies_file),cwd=ies_dir)
     
     pst = pyemu.Pst(os.path.join(ies_dir, ies_file))
     obs = pst.observation_data
@@ -519,7 +519,7 @@ def compare_mf6_freyberg():
         ies_pst.pestpp_options.pop("ies_localizer",None)
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
-        ies_pst.pestpp_options["ies_drop_conflicts"] = True
+        ies_pst.pestpp_options["ies_drop_conflicts"] = False
         ies_pst.pestpp_options["ies_num_reals"] = 50
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
@@ -533,24 +533,24 @@ def compare_mf6_freyberg():
         da_pst.pestpp_options.pop("ies_localizer", None)
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
-        da_pst.pestpp_options["ies_drop_conflicts"] = True
+        da_pst.pestpp_options["ies_drop_conflicts"] = False
         da_pst.pestpp_options["ies_num_reals"] = 50
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d,"freyberg6_run_da.pst"),version=2)
     
         # run da          
-        m_da_dir = os.path.join('simple_master_da_{0}'.format(ireal))        
+        m_da_dir = os.path.join('simple_master2_da_{0}'.format(ireal))        
         
-        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg6_run_da.pst", port=port,
+        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da.exe', "freyberg6_run_da.pst", port=port,
                                     num_workers=4, master_dir=m_da_dir, verbose=True)
                                     
         shutil.rmtree(da_t_d)
     
         # run ies  
-        m_ies_dir = os.path.join('simple_master_ies_{0}'.format(ireal))
+        m_ies_dir = os.path.join('simple_master2_ies_{0}'.format(ireal))
     
-        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg6_run_ies.pst", port=port,
+        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies.exe', "freyberg6_run_ies.pst", port=port,
                                     num_workers=4, master_dir=m_ies_dir, verbose=True)
                                     
         shutil.rmtree(ies_t_d)
@@ -559,15 +559,137 @@ def run_complex_prior_mc(c_t):
     pyemu.os_utils.start_workers(c_t,"pestpp-ies","freyberg.pst",num_workers=4,worker_root=".",
                                  master_dir=c_t.replace("template","master"))
     
-    
+def plot_phi_seq_bat():
+    seq_phi_master = []
+    bat_phi_master = []
+    bat_phi_master = pd.DataFrame(bat_phi_master)
+
+    for i in range(100):
+        seq_dir = os.path.join('simple_master_da_{0}'.format(i))
+        bat_dir = os.path.join('simple_master_ies_{0}'.format(i))
+
+        bat_phi = pd.read_csv(os.path.join(bat_dir, 'freyberg6_run_ies.phi.actual.csv'))
+        bat_phi_master = bat_phi_master.append(bat_phi.iloc[3,:])
+        # print(bat_phi.iloc[3,:])
+
+        seq_phi = pd.read_csv(os.path.join(seq_dir, 'freyberg6_run_da.global.phi.actual.csv'))
+        seq_phi = seq_phi.loc[seq_phi.iteration.max(),'mean'].sum()
+        seq_phi_master.append(seq_phi)
+
+        # print(seq_phi)
+
+    plt.hist([bat_phi_master.iloc[:,3], seq_phi_master],  label=['BAT', 'SEQ'])
+    plt.legend(loc='upper right')
+    plt.title("mean phi for batch data assimilation of simple model across 100 complex reals")
+    plt.show()
+
+def s_plot():
+    complex_dir = os.path.join('complex_master')
+    complex_obs = pd.read_csv(os.path.join(complex_dir, 'freyberg.0.obs.csv'))
+    complex_gw_all = []
+    complex_tail_all = []
+    complex_head_all = []
+    simple_bat_gw_all = []
+    simple_bat_tail_all = []
+    simple_bat_head_all = []
+    simple_seq_gw_all = []
+    simple_seq_tail_all = []
+    simple_seq_head_all = []
+
+    for i in range(100):
+        print('working on realization ', i)
+        complex_tail = complex_obs.loc[i,'sfr_usecol:tailwater_time:397.0']
+        complex_head = complex_obs.loc[i,'sfr_usecol:headwater_time:670.0']
+        complex_gw = complex_obs.loc[i,'hds_usecol:trgw_0_29_5_time:670.0']
+        complex_gw_all.append(complex_gw)
+        complex_head_all.append(complex_head)
+        complex_tail_all.append(complex_tail)
+
+        simple_bat_dir = os.path.join('simple_master_ies_{0}'.format(i))
+        simple_bat = pd.read_csv(os.path.join(simple_bat_dir, 'freyberg6_run_ies.3.obs.csv'))
+        simple_bat_gw = simple_bat.loc[:,'trgw_0_9_1_20171031']
+        simple_bat_tail = simple_bat.loc[:,'tailwater_20170131']
+        simple_bat_head = simple_bat.loc[:,'headwater_20171031']
+        simple_bat_tail_all.append(simple_bat_tail)
+        simple_bat_head_all.append(simple_bat_head)
+        simple_bat_gw_all.append(simple_bat_gw)
+
+        simple_seq_dir = os.path.join('simple_master_da_{0}'.format(i))
+        simple_seq = pd.read_csv(os.path.join(simple_seq_dir, 'freyberg6_run_da.23.0.obs.csv'))
+        simple_seq_gw = simple_seq.loc[:,'head_00_009_001']
+        simple_seq_head = simple_seq.loc[:,'headwater']
+        simple_seq_head_all.append(simple_seq_head)
+        simple_seq_gw_all.append(simple_seq_gw)
+
+        simple_seq = pd.read_csv(os.path.join(simple_seq_dir, 'freyberg6_run_da.14.0.obs.csv'))
+        simple_seq_tail = simple_seq.loc[:,'tailwater']
+        simple_seq_tail_all.append(simple_seq_tail)
+
+    simple_seq_tail_all = pd.DataFrame(simple_seq_tail_all)
+    simple_seq_tail_all.to_csv('simple_seq_tail_all.csv')
+    simple_bat_tail_all = pd.DataFrame(simple_bat_tail_all)
+    simple_bat_tail_all.to_csv('simple_bat_tail_all.csv')
+    simple_seq_head_all = pd.DataFrame(simple_seq_head_all)
+    simple_seq_head_all.to_csv('simple_seq_head_all.csv')
+    simple_bat_head_all = pd.DataFrame(simple_bat_head_all)
+    simple_bat_head_all.to_csv('simple_bat_head_all.csv')
+    simple_seq_gw_all = pd.DataFrame(simple_seq_gw_all)
+    simple_seq_gw_all.to_csv('simple_seq_gw_all.csv')
+    simple_bat_gw_all = pd.DataFrame(simple_bat_gw_all)
+    simple_bat_gw_all.to_csv('simple_bat_gw_all.csv')
+    complex_gw_all = pd.DataFrame(complex_gw_all)
+    complex_gw_all.to_csv('complex_gw_all.csv')
+    complex_head_all = pd.DataFrame(complex_head_all)
+    complex_head_all.to_csv('complex_head_all.csv')
+    complex_tail_all = pd.DataFrame(complex_tail_all)
+    complex_tail_all.to_csv('complex_tail_all.csv')
+
+    # plt.xlim(33, 39)
+    # plt.ylim(33, 39)
+    # plt.title('GW_3 Forecast')
+    # plt.xlabel('Simple Forecast (ft)')
+    # plt.ylabel('Complex Forecast (ft)')
+    # for ye, xe in zip(complex_gw_all, simple_bat_gw_all):
+    #     for ze, le in zip(complex_gw_all, simple_seq_gw_all):
+    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1,label = 'BAT')
+    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    # plt.legend(loc = 'upper right')
+    # # plt.tight_layout()
+    # # plt.savefig('gw_3_forecast.pdf')
+    # # plt.close()
+    # plt.show()
+
+    # for ye, xe in zip(complex_head_all, simple_bat_head_all):
+    #     for ze, le in zip(complex_head_all, simple_seq_head_all):
+    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1, label='BAT')
+    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1, label='SEQ')
+    #         plt.title('Headwater Forecast')
+    #         plt.xlabel('Simple Forecast (ft3/d)')
+    #         plt.ylabel('Complex Forecast (ft3/d)')
+    #         plt.legend(loc='upper right')
+    #         # plt.plot([0, 1], [0, 1])
+    # plt.show()
+    #
+    # for ye, xe in zip(complex_tail_all, simple_bat_tail_all):
+    #     for ze, le in zip(complex_tail_all, simple_seq_tail_all):
+    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1)
+    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1)
+    #         plt.title('Tailwater Forecast')
+    #         plt.xlabel('Simple Forecast (ft3/d)')
+    #         plt.ylabel('Complex Forecast (ft3/d)')
+    #         # plt.plot([0, 1], [0, 1])
+    # plt.show()
+
 
 if __name__ == "__main__":
     
     # BOOLEANS TO SELECT CODE BLOCKS BELOW (currently a wishlist)
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
-    run_simple_complex = True
-    plot_s_vs_s = False
+    run_simple_complex = False
+    plot_s_vs_s = True
+    plot_phis = False
+    plot_phi_diffs = False
 
 
     
@@ -580,8 +702,14 @@ if __name__ == "__main__":
     if run_simple_complex:
         compare_mf6_freyberg()
         
-        
-#     if plot_s_vs_s:
+    if plot_phis:
+        plot_phi_seq_bat()
+
+    if plot_phi_diffs:
+        plot_phi_diff_seq_bat()
+
+    if plot_s_vs_s:
+        s_plot()
         
 
 
