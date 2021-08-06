@@ -583,6 +583,21 @@ def plot_phi_seq_bat():
     plt.title("mean phi for batch data assimilation of simple model across 100 complex reals")
     plt.show()
 
+def complex_obs_mean():
+    complex_dir = os.path.join('complex_master')
+    complex_obs = pd.read_csv(os.path.join(complex_dir, 'freyberg.0.obs.csv'))
+    complex_obs = complex_obs.drop(['real_name'], axis=1)
+    start_date = pd.to_datetime('20151231', format='%Y%m%d')
+    complex_obs.loc['time',:] = complex_obs.columns.to_series().apply(lambda x: float(x.split(':')[-1]))
+    time = complex_obs.loc["time",:]
+    time = pd.to_timedelta(time.values, unit='D')
+    complex_obs.loc["org_time",:] = start_date + time.values
+    complex_obs = complex_obs.T
+    complex_obs.set_index('org_time', in_place = True)
+    new_complex_obs = complex_obs.resample('M').mean()
+    print(new_complex_obs)
+
+
 def s_plot():
     complex_dir = os.path.join('complex_master')
     complex_obs = pd.read_csv(os.path.join(complex_dir, 'freyberg.0.obs.csv'))
@@ -625,61 +640,19 @@ def s_plot():
         simple_seq_tail = simple_seq.loc[:,'tailwater']
         simple_seq_tail_all.append(simple_seq_tail)
 
-    simple_seq_tail_all = pd.DataFrame(simple_seq_tail_all)
-    simple_seq_tail_all.to_csv('simple_seq_tail_all.csv')
-    simple_bat_tail_all = pd.DataFrame(simple_bat_tail_all)
-    simple_bat_tail_all.to_csv('simple_bat_tail_all.csv')
-    simple_seq_head_all = pd.DataFrame(simple_seq_head_all)
-    simple_seq_head_all.to_csv('simple_seq_head_all.csv')
-    simple_bat_head_all = pd.DataFrame(simple_bat_head_all)
-    simple_bat_head_all.to_csv('simple_bat_head_all.csv')
-    simple_seq_gw_all = pd.DataFrame(simple_seq_gw_all)
-    simple_seq_gw_all.to_csv('simple_seq_gw_all.csv')
-    simple_bat_gw_all = pd.DataFrame(simple_bat_gw_all)
-    simple_bat_gw_all.to_csv('simple_bat_gw_all.csv')
-    complex_gw_all = pd.DataFrame(complex_gw_all)
-    complex_gw_all.to_csv('complex_gw_all.csv')
-    complex_head_all = pd.DataFrame(complex_head_all)
-    complex_head_all.to_csv('complex_head_all.csv')
-    complex_tail_all = pd.DataFrame(complex_tail_all)
-    complex_tail_all.to_csv('complex_tail_all.csv')
-
-    # plt.xlim(33, 39)
-    # plt.ylim(33, 39)
-    # plt.title('GW_3 Forecast')
-    # plt.xlabel('Simple Forecast (ft)')
-    # plt.ylabel('Complex Forecast (ft)')
-    # for ye, xe in zip(complex_gw_all, simple_bat_gw_all):
-    #     for ze, le in zip(complex_gw_all, simple_seq_gw_all):
-    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1,label = 'BAT')
-    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
-    # plt.legend(loc = 'upper right')
-    # # plt.tight_layout()
-    # # plt.savefig('gw_3_forecast.pdf')
-    # # plt.close()
-    # plt.show()
-
-    # for ye, xe in zip(complex_head_all, simple_bat_head_all):
-    #     for ze, le in zip(complex_head_all, simple_seq_head_all):
-    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1, label='BAT')
-    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1, label='SEQ')
-    #         plt.title('Headwater Forecast')
-    #         plt.xlabel('Simple Forecast (ft3/d)')
-    #         plt.ylabel('Complex Forecast (ft3/d)')
-    #         plt.legend(loc='upper right')
-    #         # plt.plot([0, 1], [0, 1])
-    # plt.show()
-    #
-    # for ye, xe in zip(complex_tail_all, simple_bat_tail_all):
-    #     for ze, le in zip(complex_tail_all, simple_seq_tail_all):
-    #         plt.scatter(xe, [ye] * len(xe), color='blue', s = 1)
-    #         plt.scatter(le, [ze] * len(le), color='orange', s = 1)
-    #         plt.title('Tailwater Forecast')
-    #         plt.xlabel('Simple Forecast (ft3/d)')
-    #         plt.ylabel('Complex Forecast (ft3/d)')
-    #         # plt.plot([0, 1], [0, 1])
-    # plt.show()
-
+    for ye, xe in zip(complex_gw_all, simple_bat_gw_all):
+        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+    for ze, le in zip(complex_gw_all, simple_seq_gw_all):
+        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    plt.xlim(33, 39)
+    plt.ylim(33, 39)
+    plt.title('GW_3 Forecast')
+    plt.xlabel('Simple Forecast (ft)')
+    plt.ylabel('Complex Forecast (ft)')
+    plt.legend(loc = 'upper right')
+    plt.tight_layout()
+    plt.savefig('gw_3_forecast.pdf')
+    plt.close()
 
 if __name__ == "__main__":
     
@@ -687,9 +660,10 @@ if __name__ == "__main__":
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
-    plot_s_vs_s = True
+    plot_s_vs_s = False
     plot_phis = False
     plot_phi_diffs = False
+    mean_complex_obs = True
 
 
     
@@ -710,6 +684,9 @@ if __name__ == "__main__":
 
     if plot_s_vs_s:
         s_plot()
+
+    if mean_complex_obs:
+        complex_obs_mean()
         
 
 
