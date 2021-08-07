@@ -583,24 +583,9 @@ def plot_phi_seq_bat():
     plt.title("mean phi for batch data assimilation of simple model across 100 complex reals")
     plt.show()
 
-def complex_obs_mean():
-    complex_dir = os.path.join('complex_master')
-    complex_obs = pd.read_csv(os.path.join(complex_dir, 'freyberg.0.obs.csv'))
-    complex_obs = complex_obs.drop(['real_name'], axis=1)
-    start_date = pd.to_datetime('20151231', format='%Y%m%d')
-    complex_obs.loc['time',:] = complex_obs.columns.to_series().apply(lambda x: float(x.split(':')[-1]))
-    time = complex_obs.loc["time",:]
-    time = pd.to_timedelta(time.values, unit='D')
-    complex_obs.loc["org_time",:] = start_date + time.values
-    complex_obs = complex_obs.T
-    complex_obs.set_index('org_time', in_place = True)
-    new_complex_obs = complex_obs.resample('M').mean()
-    print(new_complex_obs)
-
-
 def s_plot():
     complex_dir = os.path.join('complex_master')
-    complex_obs = pd.read_csv(os.path.join(complex_dir, 'freyberg.0.obs.csv'))
+    complex_obs = pd.read_csv(os.path.join(complex_dir, 'new_complex_obs.csv'))
     complex_gw_all = []
     complex_tail_all = []
     complex_head_all = []
@@ -613,9 +598,9 @@ def s_plot():
 
     for i in range(100):
         print('working on realization ', i)
-        complex_tail = complex_obs.loc[i,'sfr_usecol:tailwater_time:397.0']
-        complex_head = complex_obs.loc[i,'sfr_usecol:headwater_time:670.0']
-        complex_gw = complex_obs.loc[i,'hds_usecol:trgw_0_29_5_time:670.0']
+        complex_tail = complex_obs.loc[i,'tailwater_time:20170131']
+        complex_head = complex_obs.loc[i,'headwater_time:20171031']
+        complex_gw = complex_obs.loc[i,'trgw_0_29_5_time:20171031']
         complex_gw_all.append(complex_gw)
         complex_head_all.append(complex_head)
         complex_tail_all.append(complex_tail)
@@ -644,8 +629,8 @@ def s_plot():
         plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
     for ze, le in zip(complex_gw_all, simple_seq_gw_all):
         plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
-    plt.xlim(33, 39)
-    plt.ylim(33, 39)
+    plt.xlim(33.5, 38.5)
+    plt.ylim(33.5, 38.5)
     plt.title('GW_3 Forecast')
     plt.xlabel('Simple Forecast (ft)')
     plt.ylabel('Complex Forecast (ft)')
@@ -653,6 +638,37 @@ def s_plot():
     plt.tight_layout()
     plt.savefig('gw_3_forecast.pdf')
     plt.close()
+    # plt.show()
+
+    for ye, xe in zip(complex_head_all, simple_bat_head_all):
+        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+    for ze, le in zip(complex_head_all, simple_seq_head_all):
+        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    plt.xlim(-1500,500)
+    plt.ylim(-1500,500)
+    plt.title('Headwater Forecast')
+    plt.xlabel('Simple Forecast (ft)')
+    plt.ylabel('Complex Forecast (ft)')
+    plt.legend(loc = 'upper right')
+    plt.tight_layout()
+    plt.savefig('headwater_forecast.pdf')
+    plt.close()
+    # plt.show()
+
+    for ye, xe in zip(complex_tail_all, simple_bat_tail_all):
+        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+    for ze, le in zip(complex_tail_all, simple_seq_tail_all):
+        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    plt.xlim(-2500,0)
+    plt.ylim(-2500,0)
+    plt.title('Tailwater Forecast')
+    plt.xlabel('Simple Forecast (ft)')
+    plt.ylabel('Complex Forecast (ft)')
+    plt.legend(loc = 'upper right')
+    plt.tight_layout()
+    plt.savefig('tailwater_forecast.pdf')
+    plt.close()
+    # plt.show()
 
 if __name__ == "__main__":
     
@@ -660,12 +676,9 @@ if __name__ == "__main__":
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
-    plot_s_vs_s = False
+    plot_s_vs_s = True
     plot_phis = False
     plot_phi_diffs = False
-    mean_complex_obs = True
-
-
     
     if prep_complex_model:
         prep_complex_prior_mc()
@@ -684,9 +697,6 @@ if __name__ == "__main__":
 
     if plot_s_vs_s:
         s_plot()
-
-    if mean_complex_obs:
-        complex_obs_mean()
         
 
 
