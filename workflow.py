@@ -605,7 +605,7 @@ def s_plot():
         complex_head_all.append(complex_head)
         complex_tail_all.append(complex_tail)
 
-        simple_bat_dir = os.path.join('simple_master_ies_{0}'.format(i))
+        simple_bat_dir = os.path.join('simple_master2_ies_{0}'.format(i))
         simple_bat = pd.read_csv(os.path.join(simple_bat_dir, 'freyberg6_run_ies.3.obs.csv'))
         simple_bat_gw = simple_bat.loc[:,'trgw_0_9_1_20171031']
         simple_bat_tail = simple_bat.loc[:,'tailwater_20170131']
@@ -614,7 +614,7 @@ def s_plot():
         simple_bat_head_all.append(simple_bat_head)
         simple_bat_gw_all.append(simple_bat_gw)
 
-        simple_seq_dir = os.path.join('simple_master_da_{0}'.format(i))
+        simple_seq_dir = os.path.join('simple_master2_da_{0}'.format(i))
         simple_seq = pd.read_csv(os.path.join(simple_seq_dir, 'freyberg6_run_da.23.0.obs.csv'))
         simple_seq_gw = simple_seq.loc[:,'head_00_009_001']
         simple_seq_head = simple_seq.loc[:,'headwater']
@@ -625,50 +625,184 @@ def s_plot():
         simple_seq_tail = simple_seq.loc[:,'tailwater']
         simple_seq_tail_all.append(simple_seq_tail)
 
+    fig, ax = plt.subplots(1,1)
     for ye, xe in zip(complex_gw_all, simple_bat_gw_all):
-        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+        ax.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
     for ze, le in zip(complex_gw_all, simple_seq_gw_all):
-        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
-    plt.xlim(33.5, 38.5)
-    plt.ylim(33.5, 38.5)
-    plt.title('GW_3 Forecast')
-    plt.xlabel('Simple Forecast (ft)')
-    plt.ylabel('Complex Forecast (ft)')
-    plt.legend(loc = 'upper right')
-    plt.tight_layout()
+        ax.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    ax.set_xlim(33.5, 38.5)
+    ax.set_ylim(33.5, 38.5)
+    mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
+    mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
+    ax.plot([mn, mx], [mn, mx])
+    ax.set_title('GW_3 Forecast')
+    ax.set_xlabel('Simple Forecast (ft)')
+    ax.set_ylabel('Complex Forecast (ft)')
     plt.savefig('gw_3_forecast.pdf')
-    plt.close()
+    plt.close(fig)
     # plt.show()
 
+    fig, ax = plt.subplots(1, 1)
     for ye, xe in zip(complex_head_all, simple_bat_head_all):
-        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+        ax.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
     for ze, le in zip(complex_head_all, simple_seq_head_all):
-        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
-    plt.xlim(-1500,500)
-    plt.ylim(-1500,500)
-    plt.title('Headwater Forecast')
-    plt.xlabel('Simple Forecast (ft)')
-    plt.ylabel('Complex Forecast (ft)')
-    plt.legend(loc = 'upper right')
-    plt.tight_layout()
+        ax.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    ax.set_xlim(-1500,500)
+    ax.set_ylim(-1500,500)
+    mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
+    mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
+    ax.plot([mn, mx], [mn, mx])
+    ax.set_title('Headwater Forecast')
+    ax.set_xlabel('Simple Forecast (ft)')
+    ax.set_ylabel('Complex Forecast (ft)')
     plt.savefig('headwater_forecast.pdf')
-    plt.close()
-    # plt.show()
+    plt.close(fig)
 
+    fig, ax = plt.subplots(1, 1)
     for ye, xe in zip(complex_tail_all, simple_bat_tail_all):
-        plt.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
+        ax.scatter(xe, [ye] * len(xe), color='blue', s=1, label='BAT')
     for ze, le in zip(complex_tail_all, simple_seq_tail_all):
-        plt.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
-    plt.xlim(-2500,0)
-    plt.ylim(-2500,0)
-    plt.title('Tailwater Forecast')
-    plt.xlabel('Simple Forecast (ft)')
-    plt.ylabel('Complex Forecast (ft)')
-    plt.legend(loc = 'upper right')
-    plt.tight_layout()
+        ax.scatter(le, [ze] * len(le), color='orange', s = 1,label = 'SEQ')
+    ax.set_xlim(-1750,0)
+    ax.set_ylim(-1750,0)
+    mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
+    mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
+    ax.plot([mn, mx], [mn, mx])
+    ax.set_title('Tailwater Forecast')
+    ax.set_xlabel('Simple Forecast (ft)')
+    ax.set_ylabel('Complex Forecast (ft)')
     plt.savefig('tailwater_forecast.pdf')
-    plt.close()
-    # plt.show()
+    plt.close(fig)
+
+def plots_obs_v_sim():
+    noptmax = 3
+
+    with PdfPages(os.path.join("obs_v_sim.pdf")) as pdf:
+        for i in range(100):
+            import matplotlib.pyplot as plt
+            da_m_d = os.path.join("simple_master2_da_{0}".format(i))
+            ies_m_d = os.path.join("simple_master2_ies_{0}".format(i))
+            ies_case = "freyberg6_run_ies"
+            da_case = "freyberg6_run_da"
+
+            ies_pst = pyemu.Pst(os.path.join(ies_m_d, ies_case + ".pst"))
+            ies_obs = ies_pst.observation_data  # .loc[ies_pst.nnz_obs_names,:]
+            ies_obs = ies_obs.loc[ies_obs.obgnme.apply(lambda x: x in ies_pst.nnz_obs_groups), :]
+            ies_obs.loc[:, "datetime"] = pd.to_datetime(ies_obs.obsnme.apply(lambda x: x.split('_')[-1]),
+                                                        format='%Y%m%d')
+
+            ies_pr_oe = pd.read_csv(os.path.join(ies_m_d, ies_case + ".0.obs.csv"))
+            ies_pt_oe = pd.read_csv(os.path.join(ies_m_d, ies_case + ".{0}.obs.csv".format(noptmax)))
+
+            da_pst = pyemu.Pst(os.path.join(da_m_d, da_case + ".pst"))
+            da_obs = da_pst.observation_data.loc[da_pst.nnz_obs_names, :].copy()
+            da_obs.loc[da_obs.obsnme.str.contains("gage"), "org_obgnme"] = "gage"
+
+            num_cycles = 25
+            da_pr_dict = {}
+            da_pt_dict = {}
+            for cycle in range(num_cycles):
+                print(cycle)
+                da_pr_oe = pd.read_csv(os.path.join(da_m_d, da_case + ".{0}.0.obs.csv".format(cycle)))
+                da_pr_dict[cycle] = da_pr_oe
+                pt_file = os.path.join(da_m_d, da_case + ".{0}.{1}.obs.csv".format(cycle, noptmax))
+                if (os.path.exists(pt_file)):
+                    da_pt_oe = pd.read_csv(pt_file)
+                    da_pt_dict[cycle] = da_pt_oe
+                else:
+                    print("missing posterior", cycle)
+            ies_og_uvals = ies_obs.obgnme.unique()
+            ies_og_uvals.sort()
+
+            for og in ies_og_uvals:
+                ies_obs_og = ies_obs.loc[ies_obs.obgnme == og, :].copy()
+                ies_obs_og.sort_values(by="datetime", inplace=True)
+                da_obs_og = da_obs.loc[da_obs.org_obgnme == og, :]
+
+                dts = ies_obs_og.datetime.values
+
+                def make_plot(axes):
+                    ax = axes[0]
+                    ax.set_title("batch DA, complex real {0}, observation location: ".format(i) + og, loc="left")
+                    [ax.plot(dts, ies_pr_oe.loc[idx, ies_obs_og.obsnme], "0.5", alpha=0.5, lw=0.25) for idx in
+                        ies_pr_oe.index]
+                    [ax.plot(dts, ies_pt_oe.loc[idx, ies_obs_og.obsnme], "b", alpha=0.5, lw=0.5) for idx in
+                        ies_pt_oe.index]
+                    ax.plot(dts, ies_pr_oe.loc[ies_pr_oe.index[0], ies_obs_og.obsnme], "0.5", alpha=0.5,
+                                lw=0.1, label="prior real")
+                    ax.plot(dts, ies_pt_oe.loc[ies_pt_oe.index[0], ies_obs_og.obsnme], "b", alpha=0.5,
+                                lw=0.1, label="post real")
+                    ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    ies_obs_nz = ies_obs_og.loc[ies_obs_og.weight > 0, :]
+
+                    ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r", s=50,
+                                   zorder=10, label="obs")
+                    ax.legend(loc="upper right")
+                    ax = axes[1]
+
+                    ax.set_title(
+                            "sequential DA, complex real {0}, observation location: ".format(i) + da_obs_og.obsnme.values[0],
+                            loc="left")
+                    ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r",
+                                   s=50, zorder=10, label="obs")
+
+                    post_labeled = False
+                        # for ccycle in range(cycle):
+                        #     da_pr_oe = da_pr_dict[ccycle]
+                        #     label = None
+                        #     if ccycle == 0:
+                        #         label = "prior real"
+                        #     ax.scatter([dts[ccycle] for _ in range(da_pr_oe.shape[0])],
+                        #                da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
+                        #                marker=".", color="0.5", label=label)
+                        #
+                        #     if ccycle in da_pt_dict:
+                        #         da_pt_oe = da_pt_dict[ccycle]
+                        #         label = None
+                        #         if not post_labeled:
+                        #             label = "post real"
+                        #             post_labeled = True
+                        #         ax.scatter([dts[ccycle] for _ in range(da_pt_oe.shape[0])],
+                        #                    da_pt_oe.loc[:, da_obs_og.obsnme[0]].values,
+                        #                    marker=".", color="b", label=label)
+                    ax.set_ylim(axes[0].get_ylim())
+                    ax.legend(loc="upper right")
+
+                    # prior
+                fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+                make_plot(axes)
+                for cycle in range(num_cycles):
+                    da_pr_oe = da_pr_dict[cycle]
+                    ax = axes[1]
+                    ax.scatter([dts[cycle] for _ in range(da_pr_oe.shape[0])],
+                               da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
+                               marker=".", color="0.5")
+                    ax.set_ylim(axes[0].get_ylim())
+                # plt.tight_layout()
+                # pdf.savefig()
+                # plt.close(fig)
+
+                # posterior
+                # fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+                # make_plot(axes)
+                for cycle in range(num_cycles):
+                    da_pr_oe = da_pr_dict[cycle]
+                    ax.scatter([dts[cycle] for _ in range(da_pr_oe.shape[0])],
+                               da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
+                               marker=".", color="0.5")
+                    if cycle in da_pt_dict:
+                        da_pt_oe = da_pt_dict[cycle]
+                        ax.scatter([dts[cycle] for _ in range(da_pt_oe.shape[0])],
+                                   da_pt_oe.loc[:, da_obs_og.obsnme[0]].values,
+                                   marker=".", color="b")
+                        ax.set_ylim(axes[0].get_ylim())
+                        # plt.tight_layout()
+                pdf.savefig()
+                plt.close(fig)
+                # plt.show()
+
+
 
 if __name__ == "__main__":
     
@@ -676,9 +810,10 @@ if __name__ == "__main__":
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
-    plot_s_vs_s = True
+    plot_s_vs_s = False
     plot_phis = False
     plot_phi_diffs = False
+    plot_obs_sim = True
     
     if prep_complex_model:
         prep_complex_prior_mc()
@@ -697,6 +832,12 @@ if __name__ == "__main__":
 
     if plot_s_vs_s:
         s_plot()
+
+    if plot_obs_sim:
+        plots_obs_v_sim()
+        
+
+
         
 
 
