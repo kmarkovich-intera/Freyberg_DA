@@ -883,9 +883,39 @@ def plots_obs_v_sim():
                 # plt.show()
 
 
+def invest():
+
+    csim = flopy.mf6.MFSimulation.load(sim_ws="complex_template")
+    cm = csim.get_model("freyberg6")
+    ssim = flopy.mf6.MFSimulation.load(sim_ws="simple_template_ies")
+    sm = ssim.get_model("freyberg6")
+    ctotim = np.cumsum(csim.tdis.perioddata.array["perlen"])
+    stotim = np.cumsum(ssim.tdis.perioddata.array["perlen"])
+    
+    # for kper in range(csim.tdis.nper):
+    #     carr = cm.wel.stress_period_data.array[kper]
+    # print(carr)
+    # return
+
+    carr = cm.rch.recharge.array
+    carr = carr.mean(axis=(1,2,3))
+    sarr = sm.rch.recharge.array
+    sarr = sarr.mean(axis=(1,2,3))
+    print(sarr.shape,stotim.shape)
+    print(carr.shape,ctotim.shape)
+
+    fig,ax = plt.subplots(1,1,figsize=(6,6))
+    ax.plot(stotim[1:],sarr[1:])
+    ax.plot(ctotim[1:],carr[1:])
+    plt.show()
+
 
 if __name__ == "__main__":
     
+
+    invest()
+    exit()
+
     # BOOLEANS TO SELECT CODE BLOCKS BELOW (currently a wishlist)
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
