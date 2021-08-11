@@ -10,6 +10,8 @@ import platform
 import pyemu
 import matplotlib.pyplot as plt
 import flopy
+from matplotlib.backends.backend_pdf import PdfPages
+plt.rcParams.update({'font.size': 12})
 
 port = 4021
 
@@ -28,6 +30,30 @@ if "windows" in platform.platform().lower():
 da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
+def clean_master_dirs():
+    for i in range(100):
+        ies_d = os.path.join('simple_master2_ies_{0}'.format(i))
+        da_d = os.path.join('simple_master2_da_{0}'.format(i))
+
+        os.chdir(ies_d)
+        try:
+            os.remove('prior.jcb')
+        except:
+            print('no jcb to remove')
+        try:
+            os.remove('ies_prior.jcb')
+        except:
+            print('no jcb to remove')
+
+        os.chdir('..')
+        os.chdir(da_d)
+
+        try:
+            os.remove('da_prior.jcb')
+        except:
+            print('no jcb to remove')
+
+        os.chdir('..')
 
 def mod_tdis_sto(org_t_d,t_d):
     tdis_file = "freyberg6.tdis"
@@ -565,23 +591,34 @@ def plot_phi_seq_bat():
     bat_phi_master = pd.DataFrame(bat_phi_master)
 
     for i in range(100):
-        seq_dir = os.path.join('simple_master_da_{0}'.format(i))
-        bat_dir = os.path.join('simple_master_ies_{0}'.format(i))
+        seq_dir = os.path.join('simple_master2_da_{0}'.format(i))
+        bat_dir = os.path.join('simple_master2_ies_{0}'.format(i))
 
         bat_phi = pd.read_csv(os.path.join(bat_dir, 'freyberg6_run_ies.phi.actual.csv'))
         bat_phi_master = bat_phi_master.append(bat_phi.iloc[3,:])
         # print(bat_phi.iloc[3,:])
 
         seq_phi = pd.read_csv(os.path.join(seq_dir, 'freyberg6_run_da.global.phi.actual.csv'))
-        seq_phi = seq_phi.loc[seq_phi.iteration.max(),'mean'].sum()
-        seq_phi_master.append(seq_phi)
+        seq_cyc_mean = 0.
+        for i in range(25):
+            seq_cyc = seq_phi.loc[seq_phi.cycle == i,:]
+            seq_cyc = seq_cyc.loc[seq_cyc.iteration == 3,]
+            # print(seq_cyc)
+            try:
+                seq_cyc_mean += float(seq_cyc['mean'])
+            except:
+                print('no data assimilated')
+        seq_phi_master.append(seq_cyc_mean)
 
-        # print(seq_phi)
-
-    plt.hist([bat_phi_master.iloc[:,3], seq_phi_master],  label=['BAT', 'SEQ'])
+    plt.hist(bat_phi_master.iloc[:, 2] - seq_phi_master, label='BAT-SEQ', alpha=.3)
+    plt.hist([bat_phi_master.iloc[:,2], seq_phi_master],  label=['BAT', 'SEQ'])
     plt.legend(loc='upper right')
-    plt.title("mean phi for batch data assimilation of simple model across 100 complex reals")
-    plt.show()
+    plt.ylabel('Freqeuncy')
+    plt.xlabel('phi')
+    # plt.title("mean phi for batch data assimilation of simple model across 100 complex reals")
+    # plt.show()
+    plt.savefig('phi_hists.pdf')
+    plt.close()
 
 def s_plot():
     complex_dir = os.path.join('complex_master')
@@ -634,7 +671,7 @@ def s_plot():
     ax.set_ylim(33.5, 38.5)
     mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
     mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
-    ax.plot([mn, mx], [mn, mx])
+    ax.plot([mn, mx], [mn, mx], 'k')
     ax.set_title('GW_3 Forecast')
     ax.set_xlabel('Simple Forecast (ft)')
     ax.set_ylabel('Complex Forecast (ft)')
@@ -651,7 +688,7 @@ def s_plot():
     ax.set_ylim(-1500,500)
     mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
     mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
-    ax.plot([mn, mx], [mn, mx])
+    ax.plot([mn, mx], [mn, mx], 'k')
     ax.set_title('Headwater Forecast')
     ax.set_xlabel('Simple Forecast (ft)')
     ax.set_ylabel('Complex Forecast (ft)')
@@ -667,7 +704,7 @@ def s_plot():
     ax.set_ylim(-1750,0)
     mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
     mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
-    ax.plot([mn, mx], [mn, mx])
+    ax.plot([mn, mx], [mn, mx], 'k')
     ax.set_title('Tailwater Forecast')
     ax.set_xlabel('Simple Forecast (ft)')
     ax.set_ylabel('Complex Forecast (ft)')
@@ -676,10 +713,47 @@ def s_plot():
 
 def plots_obs_v_sim():
     noptmax = 3
+    start_date = pd.to_datetime('20151231', format='%Y%m%d')
+    c_d = 'complex_master'
+    redis_fac = 3.
+
+    # load in obs ensemble
+    oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
+    oe_f = oe_f.T
+
+    # process obs
+    hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
+    hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    hds_f.loc[:, "int_time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    time = hds_f.loc[:, "int_time"]
+    time = pd.to_timedelta(time.values - 1, unit='D')
+    hds_f.loc[:, "org_time"] = start_date + time.values
+    hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac).apply(np.int)
+    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac).apply(np.int)
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "trgw_{0}_{1}_{2}".format(x.k, x.org_i, x.org_j),
+                                             axis=1)
+
+    sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
+    sfr_f.loc[:, "int_time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    type = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
+    type = pd.DataFrame(type)
+    # type = type.replace('gage', 'gage_1')
+    sfr_f.loc[:, "type"] = type.values
+    time = sfr_f.loc[:, "int_time"]
+    time = pd.to_timedelta(time.values - 1, unit='D')
+    sfr_f.loc[:, "org_time"] = start_date + time.values
+    sfr_f.loc[:, "org_time"] = sfr_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
+
+    frames = [hds_f, sfr_f]
+
+    complex_obs = pd.concat(frames)
 
     with PdfPages(os.path.join("obs_v_sim.pdf")) as pdf:
         for i in range(100):
-            import matplotlib.pyplot as plt
             da_m_d = os.path.join("simple_master2_da_{0}".format(i))
             ies_m_d = os.path.join("simple_master2_ies_{0}".format(i))
             ies_case = "freyberg6_run_ies"
@@ -718,7 +792,10 @@ def plots_obs_v_sim():
                 ies_obs_og = ies_obs.loc[ies_obs.obgnme == og, :].copy()
                 ies_obs_og.sort_values(by="datetime", inplace=True)
                 da_obs_og = da_obs.loc[da_obs.org_obgnme == og, :]
-
+                cmplx_obs_og = complex_obs.loc[complex_obs.org_obgnme == og, :].copy()
+                cmplx_obs_og.sort_values(by="int_time", inplace=True)
+                print(cmplx_obs_og.int_time)
+                tms = pd.date_range(start='2015-12-31', periods=731, freq='D')
                 dts = ies_obs_og.datetime.values
 
                 def make_plot(axes):
@@ -732,7 +809,8 @@ def plots_obs_v_sim():
                                 lw=0.1, label="prior real")
                     ax.plot(dts, ies_pt_oe.loc[ies_pt_oe.index[0], ies_obs_og.obsnme], "b", alpha=0.5,
                                 lw=0.1, label="post real")
-                    ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    # ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    ax.plot(tms, cmplx_obs_og.iloc[:,i], 'r', label = "truth")
                     ies_obs_nz = ies_obs_og.loc[ies_obs_og.weight > 0, :]
 
                     ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r", s=50,
@@ -743,7 +821,8 @@ def plots_obs_v_sim():
                     ax.set_title(
                             "sequential DA, complex real {0}, observation location: ".format(i) + da_obs_og.obsnme.values[0],
                             loc="left")
-                    ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    # ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
+                    ax.plot(tms, cmplx_obs_og.iloc[:, i], 'r', label="truth")
                     ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r",
                                    s=50, zorder=10, label="obs")
 
@@ -779,6 +858,7 @@ def plots_obs_v_sim():
                                da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
                                marker=".", color="0.5")
                     ax.set_ylim(axes[0].get_ylim())
+
                 # plt.tight_layout()
                 # pdf.savefig()
                 # plt.close(fig)
@@ -810,10 +890,12 @@ if __name__ == "__main__":
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
+    clean_dirs = False
     plot_s_vs_s = False
-    plot_phis = False
+    plot_phis = True
     plot_phi_diffs = False
-    plot_obs_sim = True
+    plot_obs_sim = False
+
     
     if prep_complex_model:
         prep_complex_prior_mc()
@@ -836,8 +918,6 @@ if __name__ == "__main__":
     if plot_obs_sim:
         plots_obs_v_sim()
         
-
-
-        
-
+    if clean_dirs:
+        clean_master_dirs()
 
