@@ -1055,6 +1055,7 @@ def invest():
     ax.plot(ctotim[1:],carr[1:])
     plt.show()
 
+
 def monthly_ies_to_da(org_d="monthly_template"):
 
     org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
@@ -1095,8 +1096,10 @@ def monthly_ies_to_da(org_d="monthly_template"):
 
     for ic_file in ic_files:
         k = int(ic_file.split(".")[1][-1]) - 1
-        ib = org_sim.get_model("freyberg6").dis.idomain[k].array
+        # ib = org_sim.get_model("freyberg6").dis.idomain[k].array
+        ib = np.loadtxt(os.path.join(t_d,'freyberg6.dis_idomain_layer{0}.txt'.format(k+1)))
         arr = np.loadtxt(os.path.join(t_d,ic_file))
+        print(arr.shape)
         tpl_file = os.path.join(t_d,ic_file+".tpl")
         ic_val_dict = {}
         with open(tpl_file,'w') as f:
@@ -1105,7 +1108,7 @@ def monthly_ies_to_da(org_d="monthly_template"):
                 for j in range(arr.shape[1]):
                     if ib[i,j] != 0:
                         pname = "head_k:{0}_i:{1}_j:{2}".format(k,i,j)
-                        f.write(" ~   {0}    ~ ".format(pname))
+                        f.write(" ~ {0} ~ ".format(pname))
                         ic_val_dict[pname] = arr[i,j]
                     else:
                         f.write(" -9999999 ".format(pname))
@@ -1147,14 +1150,7 @@ def monthly_ies_to_da(org_d="monthly_template"):
         i = pyemu.pst_utils.InstructionFile(out_file+".ins")
         df = i.read_output_file(out_file)
 
-    # need to set the cycle value for all obs - just set them all to -1 and let the
-    # da_obs_cycle_table and da_weight_cycle_table handle the cycling info
 
-
-    # set the cycle for these ins file = -1 (all cycles)
-    # then add an da_obs_cycle_table and da_weight_cycle_table for the
-    # obsval and weight values across the cycles
-    #print(pst.observation_data)
     # save this for later!
     org_obs = pst.observation_data.copy()
 
@@ -1171,22 +1167,99 @@ def monthly_ies_to_da(org_d="monthly_template"):
     for ins_file in new_ins_files:
         pst.add_observations(ins_file,pst_path=".")
 
-    # write the obs and weight cycle tables with the info in org_obs
+    # set the cycle for these ins file = -1 (all cycles)
+    # then add an da_obs_cycle_table and da_weight_cycle_table for the
+    # obsval and weight values across the cycles
+    pst.observation_data.loc[:,'cycle'] = -1
 
+    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:trgw"),:].copy()
+    tr_obs.loc[tr_obs.obsnme,"time"] = tr_obs.obsnme.apply(lambda x: x.split(':')[-1])
+    tr_obs.loc[tr_obs.obsnme,"k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
+    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
+    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[4]))
+    tr_obs.loc[tr_obs.obsnme,"obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
 
+    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("head_"),:].copy()
+    head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
+    head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
+    head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
 
+    obs_heads = {}
+    odf_names = []
+    pst.observation_data.loc[:,"org_obgnme"] = np.NaN
+    pst.observation_data.loc[:, "weight"] = 0.0
+
+    for og in tr_obs.obgnme.unique():
+        site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
+        site_obs.sort_values(by="time",inplace=True)
+        head_name = "head_{0:02d}_{1:03d}_{2:03d}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
+        for i,oname in enumerate(site_obs.obsnme):
+            obs_heads[oname] = (head_name,i)
+        # assign max weight in the control file since some have zero weight and
+        # we are covering weights in the weight table
+        pst.observation_data.loc[head_name,"weight"] = site_obs.weight.max()
+        pst.observation_data.loc[head_name,"org_obgnme"] = og
+        odf_names.append(head_name)
+    odf_names.append("gage_1")
+
+    odf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    wdf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    for tr_name,(head_name,icycle) in obs_heads.items():
+        odf.loc[icycle,head_name] = org_obs.loc[tr_name,"obsval"]
+        wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
+
+    g_obs = org_obs.loc[org_obs.obsnme.str.startswith("sfr_usecol:gage_1"),:].copy()
+    #give these obs the max weight since some have zero weight
+    pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
+    g_obs.sort_index(inplace=True)
+    for i,name in enumerate(g_obs.obsnme):
+        odf.loc[i,"gage_1"] = g_obs.loc[name,"obsval"]
+        wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
+
+    odf.T.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
+    pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
+    wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
+    pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
 
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
-    print(pst.model_input_data)
+    pst.model_input_data.loc[:, "cycle"] = -1
+    for i in range(len(pst.model_input_data)):
+        if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
+            cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
+            pst.model_input_data.iloc[i, 2] = cy
+        elif pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
+            cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
+            pst.model_input_data.iloc[i, 2] = cy
+        elif pst.model_input_data.iloc[i,0].startswith('multiplier_const_rch'):
+            cy = int(pst.model_input_data.iloc[i,0].split('_')[4])
+            pst.model_input_data.iloc[i, 2] = cy
 
+    pst.model_output_data.loc[:,"cycle"] = -1
 
-    print(pst.model_output_data)
     # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
     # should get a cycle value of -1.
-    print(pst.parameter_data)
+    pst.parameter_data.loc[:, "cycle"] = -1
 
+    for i in range(len(pst.parameter_data)):
+        if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+            pst.parameter_data.iloc[i, 10] = cy
+        elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
+            cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
+            pst.parameter_data.iloc[i, 10] = cy
+        elif pst.parameter_data.iloc[i,0].startswith('multiplier_const_rch'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
+            pst.parameter_data.iloc[i, 10] = cy
 
-
+    pst.control_data.noptmax = 3
+    # pst.pestpp_options["ies_num_reals"] = 3
+    pst.pestpp_options["da_num_reals"] = 50
+    # if not sync_state_names:
+    #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
+    #     obs = pst.observation_data
+    #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
+    pst.write(os.path.join(t_d,"test.pst"))
+    return pst
 
 
 if __name__ == "__main__":
@@ -1198,7 +1271,6 @@ if __name__ == "__main__":
     # exit()
 
     # BOOLEANS TO SELECT CODE BLOCKS BELOW
-    prep_simple_models = True
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
@@ -1207,10 +1279,6 @@ if __name__ == "__main__":
     plot_phis = False
     plot_phi_diffs = False
     plot_obs_sim = False
-
-    if prep_simple_models:
-        da_prep_4_mf6_freyberg_seq()
-        # da_prep_4_mf6_freyberg_seq_tbl()
 
     if prep_complex_model:
         prep_complex_prior_mc()
