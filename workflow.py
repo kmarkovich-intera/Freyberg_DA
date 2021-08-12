@@ -1086,25 +1086,106 @@ def monthly_ies_to_da(org_d="monthly_template"):
     pyemu.os_utils.run("mf6",cwd=t_d)
 
     pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+
+
+
     # add initial condition parameters (all cells)
+    ic_files = [f for f in os.listdir(t_d) if "ic_strt" in f.lower() and f.lower().endswith(".txt")]
+    print(ic_files)
+
+    for ic_file in ic_files:
+        k = int(ic_file.split(".")[1][-1]) - 1
+        ib = org_sim.get_model("freyberg6").dis.idomain[k].array
+        arr = np.loadtxt(os.path.join(t_d,ic_file))
+        tpl_file = os.path.join(t_d,ic_file+".tpl")
+        ic_val_dict = {}
+        with open(tpl_file,'w') as f:
+            f.write("ptf ~\n")
+            for i in range(arr.shape[0]):
+                for j in range(arr.shape[1]):
+                    if ib[i,j] != 0:
+                        pname = "head_k:{0}_i:{1}_j:{2}".format(k,i,j)
+                        f.write(" ~   {0}    ~ ".format(pname))
+                        ic_val_dict[pname] = arr[i,j]
+                    else:
+                        f.write(" -9999999 ".format(pname))
+        df = pst.add_parameters(tpl_file,pst_path=".")
+        for pname,parval1 in ic_val_dict.items():
+            pst.parameter_data.loc[pname,"parval1"] = parval1
+            # just to keep the initial states in reality....
+            pst.parameter_data.loc[pname, "parlbnd"] = 0
+            pst.parameter_data.loc[pname, "parubnd"] = 100
+
     # and add final simulated water level observations (all cells - will need a new post processor)
-    # and link these two via the observation data state_par_link attr. set the cycle attr for both of these
-    # quantities to -1 (all cycles)
+    # and link these two via the observation data state_par_link attr.
+    frun = os.path.join(t_d,"forward_run.py")
+    frun_lines = open(frun).readlines()
+    frun_lines.append("import flopy\n")
+    frun_lines.append("hds = flopy.utils.HeadFile('freyberg6_freyberg.hds')\n")
+    frun_lines.append("arr = hds.get_data()\n")
+    frun_lines.append("for k,a in enumerate(arr):\n")
+    frun_lines.append("    np.savetxt('sim_head_{0}.dat'.format(k),a,fmt='%15.6E')\n")
+    with open(frun,'w') as f:
+        for line in frun_lines:
+            f.write(line)
+    hds = flopy.utils.HeadFile(os.path.join(t_d,"freyberg6_freyberg.hds"))
+    arr = hds.get_data()
+    new_ins_files = []
+    for k in range(arr.shape[0]):
+        out_file = os.path.join(t_d,"sim_head_{0}.dat".format(k))
+        np.savetxt(out_file,arr[k,:,:],fmt="%15.6E")
+        with open(out_file+".ins",'w') as f:
+            f.write("pif ~\n")
+            for i in range(arr.shape[1]):
+                f.write("l1 ")
+                for j in range(arr.shape[2]):
+                    oname = "head_k:{0}_i:{1}_j:{2}".format(k,i,j)
+                    f.write(" !{0}! ".format(oname))
+                f.write("\n")
+        # just to check that the ins file is valid...
+        new_ins_files.append(out_file+".ins")
+        i = pyemu.pst_utils.InstructionFile(out_file+".ins")
+        df = i.read_output_file(out_file)
+
+    # need to set the cycle value for all obs - just set them all to -1 and let the
+    # da_obs_cycle_table and da_weight_cycle_table handle the cycling info
+
+
+    # set the cycle for these ins file = -1 (all cycles)
+    # then add an da_obs_cycle_table and da_weight_cycle_table for the
+    # obsval and weight values across the cycles
+    #print(pst.observation_data)
+    # save this for later!
+    org_obs = pst.observation_data.copy()
+
+    # now drop all existing obs, mod the ins file and re-add stress period 1 obs
+    for ins_file in pst.model_output_data.pest_file:
+        ins_lines = open(os.path.join(t_d,ins_file),'r').readlines()
+        keep_lines = ins_lines[:3]
+        pst.drop_observations(os.path.join(t_d,ins_file),pst_path=".")
+        with open(os.path.join(t_d,ins_file),'w') as f:
+            for line in keep_lines:
+                f.write(line)
+        pst.add_observations(os.path.join(t_d,ins_file),pst_path=".")
+
+    for ins_file in new_ins_files:
+        pst.add_observations(ins_file,pst_path=".")
+
+    # write the obs and weight cycle tables with the info in org_obs
+
+
+
 
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
     print(pst.model_input_data)
 
-    # need to refactor the sfr and head obs ins files to read only the first stress period outputs
-    # set the cycle for these ins file = -1 (all cycles)
-    # then add an da_obs_cycle_table and da_weight_cycle_table for the
-    # obsval and weight values across the cycles
+
     print(pst.model_output_data)
     # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
     # should get a cycle value of -1.
     print(pst.parameter_data)
-    # need to set the cycle value for all obs - just set them all to -1 and let the
-    #da_obs_cycle_table and da_weight_cycle_table handle the cycling info
-    print(pst.observation_data)
+
+
 
 
 

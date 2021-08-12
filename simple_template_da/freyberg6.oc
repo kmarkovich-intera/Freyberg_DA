@@ -8,6 +8,5 @@ BEGIN PERIOD  1
   SAVE  budget  all
   SAVE  head  all
   PRINT  budget  all
-  PRINT head all
 END PERIOD  1
 
