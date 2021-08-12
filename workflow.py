@@ -1055,9 +1055,63 @@ def invest():
     ax.plot(ctotim[1:],carr[1:])
     plt.show()
 
+def monthly_ies_to_da(org_d="monthly_template"):
+
+    org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
+    org_totim = np.cumsum(org_sim.tdis.perioddata.array["perlen"])
+
+    t_d = "seq_" + org_d
+    if os.path.exists(t_d):
+        shutil.rmtree(t_d)
+    shutil.copytree(org_d,t_d)
+
+    # first modify the tdis
+    with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+        f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
+    # make sure it runs
+    pyemu.os_utils.run("mf6", cwd=t_d)
+
+    # write a tdis template file - could possibly keep all 25 stress periods to
+    # simulate a 2-year-ahead forecast...
+    with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
+        f.write("ptf  ~\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+        f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
+    new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
+    new_tpl_cycle = [-1]
+
+    pyemu.os_utils.run("mf6",cwd=t_d)
+
+    pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    # add initial condition parameters (all cells)
+    # and add final simulated water level observations (all cells - will need a new post processor)
+    # and link these two via the observation data state_par_link attr. set the cycle attr for both of these
+    # quantities to -1 (all cycles)
+
+    # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
+    print(pst.model_input_data)
+
+    # need to refactor the sfr and head obs ins files to read only the first stress period outputs
+    # set the cycle for these ins file = -1 (all cycles)
+    # then add an da_obs_cycle_table and da_weight_cycle_table for the
+    # obsval and weight values across the cycles
+    print(pst.model_output_data)
+    # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
+    # should get a cycle value of -1.
+    print(pst.parameter_data)
+    # need to set the cycle value for all obs - just set them all to -1 and let the
+    #da_obs_cycle_table and da_weight_cycle_table handle the cycling info
+    print(pst.observation_data)
+
+
 
 if __name__ == "__main__":
-    
+
+    monthly_ies_to_da()
+    exit()
 
     # invest()
     # exit()
