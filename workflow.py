@@ -83,10 +83,10 @@ def mod_tdis_sto(org_t_d,t_d):
          f.write("\nbegin period 1\n  transient\nend period 1\n")
 
 def da_prep_4_mf6_freyberg_seq(sync_state_names=True):
-    t_d = os.path.join("mf6_freyberg","template_seq")
+    t_d = "simple_template_da"
     if os.path.exists(t_d):
         shutil.rmtree(t_d)
-    shutil.copytree(os.path.join("mf6_freyberg","template"),t_d)
+    shutil.copytree("monthly_template",t_d)
     for f in os.listdir(t_d):
         for tag in ["ies","opt","glm"]:
             if tag in f.lower():
@@ -245,73 +245,97 @@ def da_prep_4_mf6_freyberg_seq(sync_state_names=True):
         #print(df)
 
     # split out the wel and rch tpl files into cycle files
-    lines = []
-    with open(os.path.join(t_d,"freyberg6.wel.tpl"),'r') as f:
-        for i in range(19):
-            lines.append(f.readline())
-    print(lines)
 
+    # lines = []
+    # with open(os.path.join(t_d,"freyberg6.wel.tpl"),'r') as f:
+    #     for i in range(19):
+    #         lines.append(f.readline())
+    # print(lines)
+    #
     for icycle in range(25):
-        tpl_file = os.path.join(t_d,"freyberg6.wel_{0}.tpl".format(icycle))
-        with open(tpl_file,'w') as f:
-            for line in lines:
-                new_line = line.replace("_0","_{0}".format(icycle))
-                f.write(new_line)
+        tpl_file = os.path.join(t_d,"wel_grid_{0}_inst0_grid.csv.tpl".format(icycle))
+        # with open(tpl_file,'w') as f:
+        #     for line in lines:
+        #         new_line = line.replace("_0","_{0}".format(icycle))
+        #         f.write(new_line)
 
         new_tpl.append(tpl_file)
         new_in.append(os.path.join(t_d,"freyberg6.wel"))
         new_tpl_cycle.append(icycle)
-    remove_tpl = ["freyberg6.wel.tpl"]
-
-    lines = []
-    with open(os.path.join(t_d, "freyberg6.rch.tpl"), 'r') as f:
-        for i in range(11):
-            lines.append(f.readline())
-    print(lines)
 
     for icycle in range(25):
-        tpl_file = os.path.join(t_d,"freyberg6.rch_{0}.tpl".format(icycle))
-        with open(tpl_file,'w') as f:
-            for line in lines:
-                new_line = line.replace("_0","_{0}".format(icycle))
-                f.write(new_line)
+        tpl_file = os.path.join(t_d,"twel_mlt_{0}_inst0_constant.csv.tpl".format(icycle))
+        # with open(tpl_file,'w') as f:
+        #     for line in lines:
+        #         new_line = line.replace("_0","_{0}".format(icycle))
+        #         f.write(new_line)
 
+        new_tpl.append(tpl_file)
+        new_in.append(os.path.join(t_d,"freyberg6.wel"))
+        new_tpl_cycle.append(icycle)
+    # remove_tpl = ["freyberg6.wel.tpl"]
+    #
+    # lines = []
+    # with open(os.path.join(t_d, "freyberg6.rch.tpl"), 'r') as f:
+    #     for i in range(11):
+    #         lines.append(f.readline())
+    # print(lines)
+    #
+    for icycle in range(25):
+        tpl_file = os.path.join(t_d,"rch_recharge_{0}_cn_inst0_constant.csv.tpl".format(icycle))
+    #     with open(tpl_file,'w') as f:
+    #         for line in lines:
+    #             new_line = line.replace("_0","_{0}".format(icycle))
+    #             f.write(new_line)
+    #
         new_tpl.append(tpl_file)
         new_in.append(os.path.join(t_d,"freyberg6.rch"))
         new_tpl_cycle.append(icycle)
-    remove_tpl.append('freyberg6.rch.tpl')
+    # remove_tpl.append('freyberg6.rch.tpl')
 
     # now for the fun part: modify the pst
-    pst = pyemu.Pst(os.path.join(t_d,"freyberg6_run.pst"))
+    pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    pst.parameter_data = pst.parameter_data.drop(['extra','inst','i','j','x','y','zone','usecol','idx0','idx1','idx2','idx3'], axis = 1)
+    pst.model_input_data.loc[:, "cycle"] = -1
+    pst.parameter_data.loc[:, "cycle"] = -1
 
-    print(pst.npar_adj,pst.nnz_obs)
 
-    # swap out obs info
-    dropped_dfs = []
-    for ins in remove_ins:
-        dropped_dfs.append(pst.drop_observations(os.path.join(t_d, ins), '.'))
-    for insf, outf, cy in zip(new_ins, new_out, new_ins_cycle):
-        df = pst.add_observations(insf,outf, pst_path=".")
-        pst.observation_data.loc[df.obsnme, "cycle"] = cy
-        pst.model_output_data.loc[os.path.join(".",os.path.split(insf)[1]),"cycle"] = cy
-    pst.observation_data.loc[:,"weight"] = 0.0
-    for df in dropped_dfs:
-        for c in ["obsval","weight"]:
-            pst.observation_data.loc[df.obsnme, c] = df.loc[:, c]
+    for i in range(9766):
+        if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+            pst.parameter_data.iloc[i, 10] = cy
+        elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
+            pst.parameter_data.iloc[i, 10] = cy
+        elif pst.parameter_data.iloc[i,0].startswith('multiplier_const_rch'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
+            pst.parameter_data.iloc[i, 10] = cy
 
-    # swap out par info
-    dropped_dfs = []
-    for tpl in remove_tpl:
-        dropped_dfs.append(pst.drop_parameters(os.path.join(t_d,tpl),'.'))
-    pst.parameter_data.loc[:,"cycle"] = -1
-    pst.model_input_data.loc[:,"cycle"] = -1
-    for tplf, inf, cy in zip(new_tpl,new_in,new_tpl_cycle):
-        df = pst.add_parameters(tplf,inf,pst_path=".")
-        pst.parameter_data.loc[df.parnme,"cycle"] = cy
-        pst.model_input_data.loc[os.path.join(".",os.path.split(tplf)[1]),"cycle"] = cy
-    for df in dropped_dfs:
-        for c in ["parval1","parubnd","parlbnd","pargp"]:
-            pst.parameter_data.loc[df.parnme,c] = df.loc[:,c]
+    # print(pst.npar_adj,pst.nnz_obs)
+    #
+    # # swap out obs info
+    # dropped_dfs = []
+    # # for ins in remove_ins:
+    # #     dropped_dfs.append(pst.drop_observations(os.path.join(t_d, ins), '.'))
+    # for insf, outf, cy in zip(new_ins, new_out, new_ins_cycle):
+    #     df = pst.add_observations(insf,outf, pst_path=".")
+    #     pst.observation_data.loc[:, "cycle"] = cy
+    #     pst.model_output_data.loc[os.path.join(".",os.path.split(insf)[1]),"cycle"] = cy
+    # pst.observation_data.loc[:,"weight"] = 0.0
+    # for df in dropped_dfs:
+    #     for c in ["obsval","weight"]:
+    #         pst.observation_data.loc[df.obsnme, c] = df.loc[:, c]
+    #
+    # # swap out par info
+    # dropped_dfs = []
+    # # for tpl in remove_tpl:
+    # #     dropped_dfs.append(pst.drop_parameters(os.path.join(t_d,tpl),'.'))
+    # for tplf, inf, cy in zip(new_tpl,new_in,new_tpl_cycle):
+    #     df = pst.add_parameters(tplf,inf,pst_path=".")
+    #     pst.parameter_data.loc[df.parnme,"cycle"] = cy
+    #     pst.model_input_data.loc[os.path.join(".",os.path.split(tplf)[1]),"cycle"] = cy
+    # for df in dropped_dfs:
+    #     for c in ["parval1","parubnd","parlbnd","pargp"]:
+    #         pst.parameter_data.loc[df.parnme,c] = df.loc[:,c]
 
     #set the state parameter info
     for p,v in ic_parvals.items():
@@ -320,18 +344,140 @@ def da_prep_4_mf6_freyberg_seq(sync_state_names=True):
         pst.parameter_data.loc[p, "parubnd"] = v * 1.5
         pst.parameter_data.loc[p,"pargp"] = "head_state"
         pst.parameter_data.loc[p,"partrans"] = "none"
+        pst.parameter_data.loc[p,"scale"] = 1.0
+        pst.parameter_data.loc[p,"offset"] = 0.0
+        pst.parameter_data.loc[p,"dercom"] = 1
+        pst.parameter_data.loc[p,"cycle"] = -1
+        pst.parameter_data.loc[p, "parchglim"] = "factor"
+        pst.parameter_data.loc[p, "parnme"] = p
 
-    pst.control_data.noptmax = 2
+    #add all head locs to obs data
+    pst.observation_data = pst.observation_data.drop(['extra','usecol','time'], axis=1)
+    for p, v in ic_parvals.items():
+        pst.observation_data.loc[p, "obsval"] = v
+        pst.observation_data.loc[p, "obsnme"] = 'o' + p
+        pst.observation_data.loc[p, "weight"] = 0.
+        pst.observation_data.loc[p, "obgnme"] = 'obgnme'
+        pst.observation_data.loc[p, "state_par_link"] = p
+
+    #set up per length parameter
+    pst.parameter_data.loc["perlen", "partrans"] = "fixed"
+    pst.parameter_data.loc["perlen", "parval1"] = 1.0
+    pst.parameter_data.loc["perlen", "parlbnd"] = 1e-10
+    pst.parameter_data.loc["perlen", "parubnd"] = 11000000000.0
+    pst.parameter_data.loc["perlen", "pargp"] = "pargp"
+    pst.parameter_data.loc["perlen", "parchglim"] = "factor"
+    pst.parameter_data.loc["perlen", "scale"] = 1.0
+    pst.parameter_data.loc["perlen", "offset"] = 0
+    pst.parameter_data.loc["perlen", "dercom"] = 1
+    pst.parameter_data.loc["perlen", "cycle"] = -1
+    pst.parameter_data.loc["perlen", "parnme"] = "perlen"
+
+
+    pst.control_data.noptmax = 3
     pst.model_command = "python forward_run.py"
     pst.pestpp_options.pop("ies_par_en")
-    pst.parameter_data.loc["perlen","partrans"] = "fixed"
-    pst.pestpp_options["ies_num_reals"] = 5
-    pst.pestpp_options["da_num_reals"] = 5
-    if not sync_state_names:
-        pst.observation_data.loc[:,"state_par_link"] = np.NaN
-        obs = pst.observation_data
-        obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
+    pst.pestpp_options["ies_num_reals"] = 50
+    pst.pestpp_options["da_num_reals"] = 50
+    # if not sync_state_names:
+    #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
+    #     obs = pst.observation_data
+    #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
     pst.write(os.path.join(t_d,"freyberg6_run_da1.pst"),version=2)
+    return pst
+
+def da_prep_4_mf6_freyberg_seq_tbl():
+    t_d = "simple_template_da"
+    if not os.path.exists(t_d):
+        da_prep_4_mf6_freyberg_seq()
+    pst = pyemu.Pst(os.path.join(t_d,"freyberg6_run_da1.pst"))
+    pdf = pd.DataFrame({"perlen":31},index=np.arange(25))
+    pdf.T.to_csv(os.path.join(t_d,"par_cycle_tbl.csv"))
+    pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_tbl.csv"
+
+    # mod sfr_out
+    sfr_ins_file = os.path.join(t_d, "sfr.csv.ins")
+    with open(sfr_ins_file, 'w') as f:
+        f.write("pif ~\n")
+        f.write("l1\n")
+        f.write("l1 ~,~ !headwater!  ~,~ !tailwater!  ~,~ !gage_1!\n")
+
+    # and lst budget
+    lines = open(os.path.join(t_d, "freyberg6_0.lst.ins"), 'r').readlines()
+    lst_ins_file = os.path.join(t_d, "freyberg6.lst.ins")
+    with open(lst_ins_file, 'w') as f:
+        for line in lines:
+            f.write(line.replace("_20151231",""))
+
+    obs = pst.observation_data.copy()
+    tr_obs = obs.loc[obs.obsnme.str.startswith("trgw"),:].copy()
+    tr_obs.loc[tr_obs.obsnme,"datetime"] = pd.to_datetime(tr_obs.obsnme.apply(lambda x: x.split('_')[-1]))
+    tr_obs.loc[tr_obs.obsnme,"k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[1]))
+    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
+    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
+    tr_obs.loc[tr_obs.obsnme,"obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
+
+    head_obs = obs.loc[obs.obsnme.str.startswith("head_"),:].copy()
+    head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1]))
+    head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
+    head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
+
+    #print(pst.nobs)
+    for ins_file in pst.model_output_data.pest_file.copy():
+        if "heads_" in ins_file and ins_file.endswith("dat_out.ins"):
+            continue
+        pst.drop_observations(os.path.join(t_d,ins_file),pst_path=".")
+    for ins_file in [sfr_ins_file,lst_ins_file]:
+        pst.add_observations(ins_file,pst_path=".")
+
+    # work out which heads are obs site
+    obs_heads = {}
+    odf_names = []
+    pst.observation_data.loc[:,"org_obgnme"] = np.NaN
+    pst.observation_data.loc[:, "weight"] = 0.0
+    for og in tr_obs.obgnme.unique():
+        site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
+        site_obs.sort_values(by="datetime",inplace=True)
+        head_name = "head_{0:02d}_{1:03d}_{2:03d}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
+        for i,oname in enumerate(site_obs.obsnme):
+            obs_heads[oname] = (head_name,i)
+        # assign max weight in the control file since some have zero weight and
+        # we are covering weights in the weight table
+        #print(og,site_obs.weight.max())
+        pst.observation_data.loc[head_name,"weight"] = site_obs.weight.max()
+        pst.observation_data.loc[head_name,"org_obgnme"] = og
+        odf_names.append(head_name)
+
+    odf_names.append("gage_1")
+
+    odf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    wdf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    for tr_name,(head_name,icycle) in obs_heads.items():
+        odf.loc[icycle,head_name] = obs.loc[tr_name,"obsval"]
+        wdf.loc[icycle, head_name] = obs.loc[tr_name, "weight"]
+
+    g_obs = obs.loc[obs.obsnme.str.startswith("gage_1"),:].copy()
+    #give these obs the max weight since some have zero weight
+    pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
+    g_obs.sort_index(inplace=True)
+    for i,name in enumerate(g_obs.obsnme):
+        odf.loc[i,"gage_1"] = g_obs.loc[name,"obsval"]
+        wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
+
+    # now drop any entries that have zero weight across all cycles
+    print(pst.nnz_obs_names)
+    odf = odf.loc[:,pst.nnz_obs_names]
+    wdf = wdf.loc[:, pst.nnz_obs_names]
+
+    odf.T.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
+    pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
+    wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
+    pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
+
+    pst.observation_data.loc[:,"cycle"] = -1
+    pst.model_output_data.loc[:,"cycle"] = -1
+
+    pst.write(os.path.join(t_d,"freyberg6_run_da2.pst"),version=2)
     return pst
     
 def process_complex_target_output(c_d, s_d, d_d, real):
@@ -913,20 +1059,24 @@ def invest():
 if __name__ == "__main__":
     
 
-    invest()
-    exit()
+    # invest()
+    # exit()
 
-    # BOOLEANS TO SELECT CODE BLOCKS BELOW (currently a wishlist)
+    # BOOLEANS TO SELECT CODE BLOCKS BELOW
+    prep_simple_models = True
     prep_complex_model = False #do this once before running paired simple/complex analysis
     run_prior_mc = False
     run_simple_complex = False
     clean_dirs = False
     plot_s_vs_s = False
-    plot_phis = True
+    plot_phis = False
     plot_phi_diffs = False
     plot_obs_sim = False
 
-    
+    if prep_simple_models:
+        da_prep_4_mf6_freyberg_seq()
+        # da_prep_4_mf6_freyberg_seq_tbl()
+
     if prep_complex_model:
         prep_complex_prior_mc()
         
