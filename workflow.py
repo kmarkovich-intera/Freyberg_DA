@@ -1291,12 +1291,15 @@ def monthly_ies_to_da(org_d="monthly_template"):
         if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
             cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
             pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
         if pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
             pst.model_input_data.iloc[i, 2] = cy - 1
-        elif pst.model_input_data.iloc[i,0].startswith('multiplier_const_rch'):
-            cy = int(pst.model_input_data.iloc[i,0].split('_')[4])
+            pst.model_input_data.iloc[i,1] = pst.model_input_data.iloc[i,1].replace(str(cy),"1")
+        elif 'rch_recharge' in pst.model_input_data.iloc[i,0] and "cn" in pst.model_input_data.iloc[i,0]:
+            cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
             pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
 
     pst.model_output_data.loc[:,"cycle"] = -1
 
@@ -1311,8 +1314,8 @@ def monthly_ies_to_da(org_d="monthly_template"):
         elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
             pst.parameter_data.iloc[i, 22] = cy - 1
-        elif pst.parameter_data.iloc[i,0].startswith('rch_recharge_20_cn'):
-            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+        elif 'rch_recharge' in pst.parameter_data.iloc[i,0] and "cn" in pst.parameter_data.iloc[i,0]:
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
             pst.parameter_data.iloc[i, 22] = cy - 1
 
     #pst.observation_data.loc[:, "state_par_link"] = ''
@@ -1345,14 +1348,14 @@ def monthly_ies_to_da(org_d="monthly_template"):
 
     pe.to_binary(os.path.join(t_d,"prior.jcb"))
 
-    pst.pestpp_options["da_num_reals"] = 100
+    pst.pestpp_options["da_num_reals"] = 3
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"test.pst"),version=2)
+    pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+    return
+    pst.pestpp_options["da_num_reals"] = 100
+    pst.write(os.path.join(t_d, "test.pst"), version=2)
     pyemu.os_utils.start_workers(t_d,"pestpp-da","test.pst",num_workers=10,master_dir=t_d+"prior_test")
-
-
-
-
 
 
 
