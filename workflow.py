@@ -1084,6 +1084,17 @@ def monthly_ies_to_da(org_d="monthly_template"):
     shutil.copytree(org_d,t_d)
 
 
+    mm_df = pd.read_csv(os.path.join(t_d,"mult2model_info.csv"))
+    print(mm_df.shape)
+    drop_rch = mm_df.loc[mm_df.model_file.apply(lambda x: "rch_" in x and not "_1." in x),:].index
+    mm_df = mm_df.drop(drop_rch)
+    print(mm_df.shape)
+    drop_wel = mm_df.loc[mm_df.model_file.apply(lambda x: ".wel_" in x and not "_1." in x), :].index
+    mm_df = mm_df.drop(drop_wel)
+    print(mm_df.shape)
+
+    mm_df.to_csv(os.path.join(t_d,"mult2model_info.csv"))
+
     # first modify the tdis
     with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
         f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
@@ -1105,14 +1116,18 @@ def monthly_ies_to_da(org_d="monthly_template"):
     pyemu.os_utils.run("mf6",cwd=t_d)
 
     pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    for tpl,inf,cy in zip(new_tpl,new_in,new_tpl_cycle):
+        df = pst.add_parameters(tpl,inf,pst_path=".")
+        pst.parameter_data.loc[df.parnme,"cycle"] = cy
+        pst.parameter_data.loc[df.parnme,"partrans"] = "fixed"
 
     #write par cycle table
     pers = org_sim.tdis.perioddata.array["perlen"]
-    pers[0] = 31
+    #pers[0] = 1000
     pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
     pdf.loc['perlen',:] = pers
     pdf.to_csv(os.path.join(t_d,"par_cycle_table.csv"))
-    pst.pestpp_options["da_par_cycle_table"] = "par_cycle_tbl.csv"
+    pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
     # add initial condition parameters (all cells)
     ic_files = [f for f in os.listdir(t_d) if "ic_strt" in f.lower() and f.lower().endswith(".txt")]
@@ -1129,18 +1144,21 @@ def monthly_ies_to_da(org_d="monthly_template"):
             f.write("ptf ~\n")
             for i in range(arr.shape[0]):
                 for j in range(arr.shape[1]):
-                    if ib[i,j] != 0:
+                    if ib[i,j] > 0 and arr[i,j] > 0:
                         pname = "head_k:{0}_i:{1}_j:{2}".format(k,i,j)
                         f.write(" ~ {0} ~ ".format(pname))
                         ic_val_dict[pname] = arr[i,j]
                     else:
                         f.write(" -9999999 ".format(pname))
+                f.write("\n")
         df = pst.add_parameters(tpl_file,pst_path=".")
         for pname,parval1 in ic_val_dict.items():
             pst.parameter_data.loc[pname,"parval1"] = parval1
-            # just to keep the initial states in reality....
-            pst.parameter_data.loc[pname, "parlbnd"] = 0
-            pst.parameter_data.loc[pname, "parubnd"] = 100
+            pst.parameter_data.loc[pname,"partrans"] = "none"
+            pst.parameter_data.loc[pname, "parchglim"] = "relative"
+
+            pst.parameter_data.loc[pname, "parlbnd"] = -1000000
+            pst.parameter_data.loc[pname, "parubnd"] = 10000000
 
     # and add final simulated water level observations (all cells - will need a new post processor)
     # and link these two via the observation data state_par_link attr.
@@ -1157,6 +1175,9 @@ def monthly_ies_to_da(org_d="monthly_template"):
     hds = flopy.utils.HeadFile(os.path.join(t_d,"freyberg6_freyberg.hds"))
     arr = hds.get_data()
     new_ins_files = []
+    new_out = []
+    new_ins_cycle = []
+
     for k in range(arr.shape[0]):
         out_file = os.path.join(t_d,"sim_head_{0}.dat".format(k))
         np.savetxt(out_file,arr[k,:,:],fmt="%15.6E")
@@ -1182,27 +1203,6 @@ def monthly_ies_to_da(org_d="monthly_template"):
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
-    new_out,new_ins_cycle = [],[]
-    # hds = pd.read_csv(os.path.join(t_d,'heads.csv'))
-    # hds = hds.drop(['time'], axis=1)
-    # print(hds.shape)
-    # lay = hds.columns.to_series().apply(lambda x: x.split('_')[1])
-    # row = hds.columns.to_series().apply(lambda x: x.split('_')[2])
-    # col = hds.columns.to_series().apply(lambda x: x.split('_')[3])
-    # fname = 'heads.csv'
-    # fname_ins = fname + ".ins"
-    # pst.drop_observations(os.path.join(t_d, fname_ins), '.')
-    # with open(os.path.join(t_d,fname_ins), 'w') as f:
-    #     f.write("pif ~\n")
-    #     f.write("l1 \n")
-    #     f.write("l1")
-    #     for i in range(hds.shape[1]):
-    #         oname = "head_k:{0}_i:{1}_j:{2}".format(lay[i], row[i], col[i])
-    #         f.write(" w !{0}! ".format(oname))
-    # # new_ins_files.append(os.path.join(t_d, fname_ins))
-    # new_out.append(os.path.join(t_d, "heads.csv"))
-    # new_ins_cycle.append(i)
-
     sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
     sfr = sfr.drop(['time'], axis=1)
     nms = sfr.columns.to_series()
@@ -1218,18 +1218,13 @@ def monthly_ies_to_da(org_d="monthly_template"):
             f.write(" ~,~ !{0}! ".format(oname))
     new_ins_files.append(os.path.join(t_d, fname_ins))
     new_out.append(os.path.join(t_d, "sfr.csv"))
-    new_ins_cycle.append(i)
+    new_ins_cycle.append(-1)
 
     #add sfr obs
     for ins_file in new_ins_files:
         pst.add_observations(ins_file,pst_path=".")
 
-
-    # set the cycle for these ins file = -1 (all cycles)
-    # then add an da_obs_cycle_table and da_weight_cycle_table for the
-    # obsval and weight values across the cycles
     pst.observation_data.loc[:,'cycle'] = -1
-
     tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:trgw"),:].copy()
     tr_obs.loc[tr_obs.obsnme,"time"] = tr_obs.obsnme.apply(lambda x: x.split(':')[-1])
     tr_obs.loc[tr_obs.obsnme,"k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
@@ -1246,6 +1241,7 @@ def monthly_ies_to_da(org_d="monthly_template"):
     odf_names = []
     pst.observation_data.loc[:,"org_obgnme"] = np.NaN
     pst.observation_data.loc[:, "weight"] = 0.0
+    pst.observation_data.loc["gage_1", "weight"] = 1.0
 
     for og in tr_obs.obgnme.unique():
         site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
@@ -1282,26 +1278,25 @@ def monthly_ies_to_da(org_d="monthly_template"):
             odf.loc[i,"gage_1"] = g_obs.loc[name,"obsval"]
             wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
 
+
+
     odf.T.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
     pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
     wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
     pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
-
-    #set all weights to zero in obs since weight cycle table takes care of it
-    pst.observation_data.weight = 0.
 
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
     pst.model_input_data.loc[:, "cycle"] = -1
     for i in range(len(pst.model_input_data)):
         if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
             cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy
-        elif pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
+            pst.model_input_data.iloc[i, 2] = cy - 1
+        if pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy
+            pst.model_input_data.iloc[i, 2] = cy - 1
         elif pst.model_input_data.iloc[i,0].startswith('multiplier_const_rch'):
             cy = int(pst.model_input_data.iloc[i,0].split('_')[4])
-            pst.model_input_data.iloc[i, 2] = cy
+            pst.model_input_data.iloc[i, 2] = cy - 1
 
     pst.model_output_data.loc[:,"cycle"] = -1
 
@@ -1312,19 +1307,19 @@ def monthly_ies_to_da(org_d="monthly_template"):
     for i in range(len(pst.parameter_data)):
         if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
             cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy
+            pst.parameter_data.iloc[i, 22] = cy - 1
         elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy
-        elif pst.parameter_data.iloc[i,0].startswith('multiplier_const_rch'):
-            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
-            pst.parameter_data.iloc[i, 22] = cy
+            pst.parameter_data.iloc[i, 22] = cy - 1
+        elif pst.parameter_data.iloc[i,0].startswith('rch_recharge_20_cn'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+            pst.parameter_data.iloc[i, 22] = cy - 1
 
-    pst.observation_data.loc[:, "state_par_link"] = ''
+    #pst.observation_data.loc[:, "state_par_link"] = ''
     # print(pst.observation_data.iloc[2429,:])
-    for i in range(len(pst.observation_data)):
-        if pst.observation_data.iloc[i, 0].startswith('head_'):
-            pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
+    #for i in range(len(pst.observation_data)):
+    #    if pst.observation_data.iloc[i, 0].startswith('head_'):
+    #        pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
 
     pst.control_data.noptmax = 3
     # # pst.pestpp_options["ies_num_reals"] = 3
@@ -1333,8 +1328,31 @@ def monthly_ies_to_da(org_d="monthly_template"):
     # #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
     # #     obs = pst.observation_data
     # #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
-    pst.write(os.path.join(t_d,"freyberg6_run_da.pst"))
+    print(pst.nnz_obs_names)
+    pst.write(os.path.join(t_d,"freyberg6_run_da.pst"),version=2)
     # return pst
+
+    pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(t_d,"prior.jcb"))
+    pepars = set(pe.columns.tolist())
+    pstpars = set(pst.par_names)
+    par = pst.parameter_data
+    d = pepars.symmetric_difference(pstpars)
+    missing = par.loc[par.parnme.apply(lambda x: x in d),"parnme"]
+    mvals = par.parval1.loc[missing]
+    pe.loc[:,missing] = np.NaN
+    for idx in pe.index:
+        pe.loc[idx,missing] = mvals
+
+    pe.to_binary(os.path.join(t_d,"prior.jcb"))
+
+    pst.pestpp_options["da_num_reals"] = 5
+    pst.control_data.noptmax = -1
+    pst.write(os.path.join(t_d,"test.pst"),version=2)
+    pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+
+
+
+
 
 
 if __name__ == "__main__":
