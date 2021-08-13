@@ -113,18 +113,35 @@ def da_prep_4_mf6_freyberg_seq(sync_state_names=True):
 
     # split out the head, sfr and list instruction files into multiple instruction file
     #eventually, want to move to da par and obs cycle tables for heads and gage_1 obs
-    lines = open(os.path.join(t_d,"heads.csv.ins"),'r').readlines()[2:]
-    new_ins,new_out,new_ins_cycle = [],[],[]
-    #print(lines)
-    for icycle, line in enumerate(lines):
-        ins_name = os.path.join(t_d,"heads_{0}.csv.ins".format(icycle))
-        with open(ins_name,'w') as f:
-            f.write("pif ~\nl1\n")
-            f.write(line)
+    # lines = open(os.path.join(t_d,"heads.csv.ins"),'r').readlines()[2:]
+    # new_ins,new_out,new_ins_cycle = [],[],[]
+    # #print(lines)
+    # for icycle, line in enumerate(lines):
+    #     ins_name = os.path.join(t_d,"heads_{0}.csv.ins".format(icycle))
+    #     with open(ins_name,'w') as f:
+    #         f.write("pif ~\nl1\n")
+    #         f.write(line)
+    #     new_ins.append(ins_name)
+    #     new_out.append(os.path.join(t_d,"heads.csv"))
+    #     new_ins_cycle.append(icycle)
+    # remove_ins = ["heads.csv.ins"]
+    hds = pd.read('heads.csv')
+    lay = hds.columns.to_series().apply(lambda x: x.split('_')[1])
+    row = hds.columns.to_series().apply(lambda x: x.split('_')[2])
+    col = hds.columns.to_series().apply(lambda x: x.split('_')[3])
+    fname = 'heads.csv'
+    fname_ins = fname + ".ins"
+    with open(fname_ins, 'w') as f:
+        f.write("pif ~\n")
+        for i in range(hds.shape[0]):
+            f.write("l1 \n")
+            f.write("l1")
+            oname = "head_k:{0}_i:{1}_j:{2}".format(lay[i], row[i], col[i])
+            f.write("w !{0}! ".format(oname))
         new_ins.append(ins_name)
-        new_out.append(os.path.join(t_d,"heads.csv"))
-        new_ins_cycle.append(icycle)
-    remove_ins = ["heads.csv.ins"]
+        new_out.append(os.path.join(t_d, "heads.csv"))
+        new_ins_cycle.append(i)
+    remove_ins.append("heads.csv.ins")
 
     lines = open(os.path.join(t_d,"sfr.csv.ins"),'r').readlines()[2:]
     #print(lines)
@@ -1066,6 +1083,7 @@ def monthly_ies_to_da(org_d="monthly_template"):
         shutil.rmtree(t_d)
     shutil.copytree(org_d,t_d)
 
+
     # first modify the tdis
     with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
         f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
@@ -1088,7 +1106,13 @@ def monthly_ies_to_da(org_d="monthly_template"):
 
     pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
 
-
+    #write par cycle table
+    pers = org_sim.tdis.perioddata.array["perlen"]
+    pers[0] = 31
+    pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
+    pdf.loc['perlen',:] = pers
+    pdf.to_csv(os.path.join(t_d,"par_cycle_table.csv"))
+    pst.pestpp_options["da_par_cycle_table"] = "par_cycle_tbl.csv"
 
     # add initial condition parameters (all cells)
     ic_files = [f for f in os.listdir(t_d) if "ic_strt" in f.lower() and f.lower().endswith(".txt")]
@@ -1099,7 +1123,6 @@ def monthly_ies_to_da(org_d="monthly_template"):
         # ib = org_sim.get_model("freyberg6").dis.idomain[k].array
         ib = np.loadtxt(os.path.join(t_d,'freyberg6.dis_idomain_layer{0}.txt'.format(k+1)))
         arr = np.loadtxt(os.path.join(t_d,ic_file))
-        print(arr.shape)
         tpl_file = os.path.join(t_d,ic_file+".tpl")
         ic_val_dict = {}
         with open(tpl_file,'w') as f:
@@ -1154,18 +1177,53 @@ def monthly_ies_to_da(org_d="monthly_template"):
     # save this for later!
     org_obs = pst.observation_data.copy()
 
-    # now drop all existing obs, mod the ins file and re-add stress period 1 obs
-    for ins_file in pst.model_output_data.pest_file:
-        ins_lines = open(os.path.join(t_d,ins_file),'r').readlines()
-        keep_lines = ins_lines[:3]
-        pst.drop_observations(os.path.join(t_d,ins_file),pst_path=".")
-        with open(os.path.join(t_d,ins_file),'w') as f:
-            for line in keep_lines:
-                f.write(line)
-        pst.add_observations(os.path.join(t_d,ins_file),pst_path=".")
+    # now drop all existing heads obs since those will be replaced by the state obs
+    fname = 'heads.csv'
+    fname_ins = fname + ".ins"
+    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
+    new_out,new_ins_cycle = [],[]
+    # hds = pd.read_csv(os.path.join(t_d,'heads.csv'))
+    # hds = hds.drop(['time'], axis=1)
+    # print(hds.shape)
+    # lay = hds.columns.to_series().apply(lambda x: x.split('_')[1])
+    # row = hds.columns.to_series().apply(lambda x: x.split('_')[2])
+    # col = hds.columns.to_series().apply(lambda x: x.split('_')[3])
+    # fname = 'heads.csv'
+    # fname_ins = fname + ".ins"
+    # pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+    # with open(os.path.join(t_d,fname_ins), 'w') as f:
+    #     f.write("pif ~\n")
+    #     f.write("l1 \n")
+    #     f.write("l1")
+    #     for i in range(hds.shape[1]):
+    #         oname = "head_k:{0}_i:{1}_j:{2}".format(lay[i], row[i], col[i])
+    #         f.write(" w !{0}! ".format(oname))
+    # # new_ins_files.append(os.path.join(t_d, fname_ins))
+    # new_out.append(os.path.join(t_d, "heads.csv"))
+    # new_ins_cycle.append(i)
+
+    sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
+    sfr = sfr.drop(['time'], axis=1)
+    nms = sfr.columns.to_series()
+    fname = 'sfr.csv'
+    fname_ins = fname + ".ins"
+    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+    with open(os.path.join(t_d, fname_ins), 'w') as f:
+        f.write("pif ~\n")
+        f.write("l1 \n")
+        f.write("l1")
+        for i in range(sfr.shape[1]):
+            oname = "{0}".format(nms[i])
+            f.write(" ~,~ !{0}! ".format(oname))
+    new_ins_files.append(os.path.join(t_d, fname_ins))
+    new_out.append(os.path.join(t_d, "sfr.csv"))
+    new_ins_cycle.append(i)
+
+    #add sfr obs
     for ins_file in new_ins_files:
         pst.add_observations(ins_file,pst_path=".")
+
 
     # set the cycle for these ins file = -1 (all cycles)
     # then add an da_obs_cycle_table and da_weight_cycle_table for the
@@ -1192,7 +1250,7 @@ def monthly_ies_to_da(org_d="monthly_template"):
     for og in tr_obs.obgnme.unique():
         site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
         site_obs.sort_values(by="time",inplace=True)
-        head_name = "head_{0:02d}_{1:03d}_{2:03d}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
+        head_name = "head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
         for i,oname in enumerate(site_obs.obsnme):
             obs_heads[oname] = (head_name,i)
         # assign max weight in the control file since some have zero weight and
@@ -1205,21 +1263,32 @@ def monthly_ies_to_da(org_d="monthly_template"):
     odf = pd.DataFrame(columns=odf_names,index=np.arange(25))
     wdf = pd.DataFrame(columns=odf_names,index=np.arange(25))
     for tr_name,(head_name,icycle) in obs_heads.items():
-        odf.loc[icycle,head_name] = org_obs.loc[tr_name,"obsval"]
-        wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
+        if icycle > 12:
+            odf.loc[icycle,head_name] = org_obs.loc[tr_name,"obsval"]
+            wdf.loc[icycle, head_name] = 0
+        else:
+            odf.loc[icycle,head_name] = org_obs.loc[tr_name,"obsval"]
+            wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
 
     g_obs = org_obs.loc[org_obs.obsnme.str.startswith("sfr_usecol:gage_1"),:].copy()
     #give these obs the max weight since some have zero weight
-    pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
+    # pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
     g_obs.sort_index(inplace=True)
     for i,name in enumerate(g_obs.obsnme):
-        odf.loc[i,"gage_1"] = g_obs.loc[name,"obsval"]
-        wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
+        if i > 12:
+            odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
+            wdf.loc[i, "gage_1"] = 0
+        else:
+            odf.loc[i,"gage_1"] = g_obs.loc[name,"obsval"]
+            wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
 
     odf.T.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
     pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
     wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
     pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
+
+    #set all weights to zero in obs since weight cycle table takes care of it
+    pst.observation_data.weight = 0.
 
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
     pst.model_input_data.loc[:, "cycle"] = -1
@@ -1243,23 +1312,29 @@ def monthly_ies_to_da(org_d="monthly_template"):
     for i in range(len(pst.parameter_data)):
         if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
             cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
-            pst.parameter_data.iloc[i, 10] = cy
+            pst.parameter_data.iloc[i, 22] = cy
         elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
-            pst.parameter_data.iloc[i, 10] = cy
+            pst.parameter_data.iloc[i, 22] = cy
         elif pst.parameter_data.iloc[i,0].startswith('multiplier_const_rch'):
             cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
-            pst.parameter_data.iloc[i, 10] = cy
+            pst.parameter_data.iloc[i, 22] = cy
+
+    pst.observation_data.loc[:, "state_par_link"] = ''
+    # print(pst.observation_data.iloc[2429,:])
+    for i in range(len(pst.observation_data)):
+        if pst.observation_data.iloc[i, 0].startswith('head_'):
+            pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
 
     pst.control_data.noptmax = 3
-    # pst.pestpp_options["ies_num_reals"] = 3
+    # # pst.pestpp_options["ies_num_reals"] = 3
     pst.pestpp_options["da_num_reals"] = 50
-    # if not sync_state_names:
-    #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
-    #     obs = pst.observation_data
-    #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
-    pst.write(os.path.join(t_d,"test.pst"))
-    return pst
+    # # if not sync_state_names:
+    # #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
+    # #     obs = pst.observation_data
+    # #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
+    pst.write(os.path.join(t_d,"freyberg6_run_da.pst"))
+    # return pst
 
 
 if __name__ == "__main__":
