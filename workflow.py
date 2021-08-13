@@ -1345,10 +1345,11 @@ def monthly_ies_to_da(org_d="monthly_template"):
 
     pe.to_binary(os.path.join(t_d,"prior.jcb"))
 
-    pst.pestpp_options["da_num_reals"] = 5
+    pst.pestpp_options["da_num_reals"] = 100
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"test.pst"),version=2)
-    pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+    pyemu.os_utils.start_workers(t_d,"pestpp-da","test.pst",num_workers=10,master_dir=t_d+"prior_test")
+
 
 
 
