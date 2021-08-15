@@ -756,7 +756,7 @@ def compare_mf6_freyberg():
         shutil.rmtree(ies_t_d)
                                 
 def run_complex_prior_mc(c_t):
-    pyemu.os_utils.start_workers(c_t,"pestpp-ies","freyberg.pst",num_workers=4,worker_root=".",
+    pyemu.os_utils.start_workers(c_t,"pestpp-ies","freyberg.pst",num_workers=10,worker_root=".",
                                  master_dir=c_t.replace("template","master"))
     
 def plot_phi_seq_bat():
@@ -1545,6 +1545,7 @@ def setup_interface(org_ws, num_reals=100):
     # build pest control file
     pst = pf.build_pst('freyberg.pst')
 
+
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
 
@@ -1554,6 +1555,7 @@ def setup_interface(org_ws, num_reals=100):
     print(strt_pars)
     for idx in pe.index:
         pe.loc[idx,strt_pars] = par.loc[strt_pars,"parval1"]
+    par.loc[strt_pars,"parchglim"] = "relative"
 
     pe.to_binary(os.path.join(template_ws, "prior.jcb"))
 
@@ -1589,7 +1591,7 @@ if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
     setup_interface("daily_model_files")
-
+    run_complex_prior_mc('daily_model_files_template')
     #monthly_ies_to_da()
     #compare_mf6_freyberg()
     exit()
