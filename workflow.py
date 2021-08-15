@@ -1527,10 +1527,10 @@ def setup_interface(org_ws, num_reals=100):
                           pargp="twel_mlt".format(kper), index_cols=[0, 1, 2], use_cols=[3],
                           upper_bound=1.5, lower_bound=0.5, datetime=dts[kper], geostruct=temporal_gs)
 
-        # add temporally indep, but spatially correlated grid-scale parameters, one per well
-        pf.add_parameters(filenames=list_file, par_type="grid", par_name_base="wel_grid_{0}".format(kper),
-                          pargp="wel_{0}".format(kper), index_cols=[0, 1, 2], use_cols=[3],
-                          upper_bound=1.5, lower_bound=0.5)
+    # add temporally indep, but spatially correlated grid-scale parameters, one per well
+    pf.add_parameters(filenames=list_files, par_type="grid", par_name_base="wel_grid",
+                      pargp="wel_grid", index_cols=[0, 1, 2], use_cols=[3],
+                      upper_bound=1.5, lower_bound=0.5)
 
     # add grid-scale parameters for SFR reach conductance.  Use layer, row, col and reach
     # number in the parameter names
@@ -1609,7 +1609,6 @@ def monthly_ies_to_da(org_d):
         shutil.rmtree(t_d)
     shutil.copytree(org_d,t_d)
 
-
     mm_df = pd.read_csv(os.path.join(t_d,"mult2model_info.csv"))
     print(mm_df.shape)
     drop_rch = mm_df.loc[mm_df.model_file.apply(lambda x: "rch_" in x and not "_1." in x),:].index
@@ -1618,10 +1617,10 @@ def monthly_ies_to_da(org_d):
     drop_wel = mm_df.loc[mm_df.model_file.apply(lambda x: ".wel_" in x and not "_1." in x), :].index
     mm_df = mm_df.drop(drop_wel)
     print(mm_df.shape)
-
     mm_df.to_csv(os.path.join(t_d,"mult2model_info.csv"))
 
-    # first modify the tdis
+
+    # modify the tdis
     with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
         f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
         f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
@@ -1629,8 +1628,7 @@ def monthly_ies_to_da(org_d):
     # make sure it runs
     pyemu.os_utils.run("mf6", cwd=t_d)
 
-    # write a tdis template file - could possibly keep all 25 stress periods to
-    # simulate a 2-year-ahead forecast...
+    # write a tdis template file
     with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
         f.write("ptf  ~\n")
         f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
@@ -1663,6 +1661,7 @@ def monthly_ies_to_da(org_d):
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
+    # fix the sfr obs
     sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
     sfr = sfr.drop(['time'], axis=1)
     nms = sfr.columns.to_series()
@@ -1692,10 +1691,12 @@ def monthly_ies_to_da(org_d):
     tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[4]))
     tr_obs.loc[tr_obs.obsnme,"obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
 
-    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("head_"),:].copy()
-    head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
-    head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
-    head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
+    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("arrobs_head_"),:].copy()
+    #head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
+    #head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
+    #head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
+    for v in ["k","i","j"]:
+        head_obs.loc[:,v] = head_obs.loc[:,v].apply(int)
 
     obs_heads = {}
     odf_names = []
@@ -1706,7 +1707,7 @@ def monthly_ies_to_da(org_d):
     for og in tr_obs.obgnme.unique():
         site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
         site_obs.sort_values(by="time",inplace=True)
-        head_name = "head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
+        head_name = "arrobs_head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
         for i,oname in enumerate(site_obs.obsnme):
             obs_heads[oname] = (head_name,i)
         # assign max weight in the control file since some have zero weight and
@@ -1746,13 +1747,13 @@ def monthly_ies_to_da(org_d):
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
     pst.model_input_data.loc[:, "cycle"] = -1
     for i in range(len(pst.model_input_data)):
-        if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
-            cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy - 1
-            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        # if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
+        #     cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
+        #     pst.model_input_data.iloc[i, 2] = cy
+        #     pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
         if pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 2] = cy
             pst.model_input_data.iloc[i,1] = pst.model_input_data.iloc[i,1].replace(str(cy),"1")
         elif 'rch_recharge' in pst.model_input_data.iloc[i,0] and "cn" in pst.model_input_data.iloc[i,0]:
             cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
@@ -1765,16 +1766,16 @@ def monthly_ies_to_da(org_d):
     # should get a cycle value of -1.
     pst.parameter_data.loc[:, "cycle"] = -1
 
-    for i in range(len(pst.parameter_data)):
-        if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
-            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy - 1
-        elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
-            cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy - 1
-        elif 'rch_recharge' in pst.parameter_data.iloc[i,0] and "cn" in pst.parameter_data.iloc[i,0]:
-            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
-            pst.parameter_data.iloc[i, 22] = cy - 1
+    for pname in pst.par_names:
+        # if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
+        #     cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+        #     pst.parameter_data.iloc[i, 22] = cy
+        if pname.startswith('twel_mlt'):
+            cy = int(pname.split('_')[2])
+            pst.parameter_data.loc[pname, "cycle"] = cy
+        elif 'rch_recharge' in pname and "cn" in pname:
+            cy = int(pname.split('_')[4])
+            pst.parameter_data.loc[pname, "cycle"] = cy - 1
 
     #pst.observation_data.loc[:, "state_par_link"] = ''
     # print(pst.observation_data.iloc[2429,:])
@@ -1806,10 +1807,10 @@ def monthly_ies_to_da(org_d):
         pe.loc[idx,missing] = mvals
     pe.to_binary(os.path.join(t_d,"prior.jcb"))
 
-    pst.pestpp_options["da_num_reals"] = 100
-    pst.control_data.noptmax = 3
+    pst.pestpp_options["da_num_reals"] = 4
+    pst.control_data.noptmax = 0
     pst.write(os.path.join(t_d,"test.pst"),version=2)
-    #pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+    pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
     return
     pst.pestpp_options["da_num_reals"] = 100
     pst.write(os.path.join(t_d, "test.pst"), version=2)
@@ -1818,7 +1819,7 @@ def monthly_ies_to_da(org_d):
 if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
-    setup_interface("daily_model_files")
+    #setup_interface("daily_model_files")
     #run_complex_prior_mc('daily_model_files_template')
     monthly_ies_to_da("monthly_model_files_template")
     #compare_mf6_freyberg()
