@@ -1084,7 +1084,7 @@ def invest():
     plt.show()
 
 
-def monthly_ies_to_da(org_d="monthly_template"):
+def monthly_ies_to_da_old(org_d="monthly_template"):
 
     org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
     org_totim = np.cumsum(org_sim.tdis.perioddata.array["perlen"])
@@ -1512,7 +1512,7 @@ def setup_interface(org_ws, num_reals=100):
         # make sure each array file in nrow X ncol dimensions (not wrapped)
         arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
         np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
-        k = int(arr_file.split('.')[0][-1]) - 1
+        k = int(arr_file.split('.')[1][-1]) - 1
         prefix = "head_k:{0}".format(k)
         pf.add_parameters(arr_file,par_type="grid",par_style="direct",pargp=prefix,par_name_base=prefix,transform="none",
                           lower_bound=-10000,upper_bound=10000,zone_array=ib)
@@ -1563,6 +1563,19 @@ def setup_interface(org_ws, num_reals=100):
     pst.control_data.noptmax = 0
     pst.pestpp_options["additional_ins_delimiters"] = ","
 
+    # ident the obs-par state linkage
+    obs = pst.observation_data
+    state_obs = obs.loc[obs.obsnme.str.contains("arrobs_head"),:].copy()
+    state_par = par.loc[par.parnme.str.contains("direct_head"),:].copy()
+    for v in ["k","i","j"]:
+        state_par.loc[:,v] = state_par.loc[:,v].apply(int)
+        state_obs.loc[:, v] = state_obs.loc[:, v].apply(int)
+    state_par_dict = {(k,i,j):n for k,i,j,n in zip(state_par.k,state_par.i,state_par.j,state_par.parnme)}
+    obs.loc[:,"state_par_link"] = np.nan
+    obs.loc[state_obs.obsnme,"state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.k,x.j,x.i),np.nan),axis=1)
+    print(obs.state_par_link.dropna())
+
+
     # write the control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"))
 
@@ -1586,13 +1599,228 @@ def setup_interface(org_ws, num_reals=100):
     pst.write(os.path.join(pf.new_d, "freyberg.pst"))
 
 
+def monthly_ies_to_da(org_d):
+
+    org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
+    org_totim = np.cumsum(org_sim.tdis.perioddata.array["perlen"])
+
+    t_d = "seq_" + org_d
+    if os.path.exists(t_d):
+        shutil.rmtree(t_d)
+    shutil.copytree(org_d,t_d)
+
+
+    mm_df = pd.read_csv(os.path.join(t_d,"mult2model_info.csv"))
+    print(mm_df.shape)
+    drop_rch = mm_df.loc[mm_df.model_file.apply(lambda x: "rch_" in x and not "_1." in x),:].index
+    mm_df = mm_df.drop(drop_rch)
+    print(mm_df.shape)
+    drop_wel = mm_df.loc[mm_df.model_file.apply(lambda x: ".wel_" in x and not "_1." in x), :].index
+    mm_df = mm_df.drop(drop_wel)
+    print(mm_df.shape)
+
+    mm_df.to_csv(os.path.join(t_d,"mult2model_info.csv"))
+
+    # first modify the tdis
+    with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+        f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
+    # make sure it runs
+    pyemu.os_utils.run("mf6", cwd=t_d)
+
+    # write a tdis template file - could possibly keep all 25 stress periods to
+    # simulate a 2-year-ahead forecast...
+    with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
+        f.write("ptf  ~\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+        f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
+    new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
+    new_tpl_cycle = [-1]
+
+    pyemu.os_utils.run("mf6",cwd=t_d)
+
+    pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    for tpl,inf,cy in zip(new_tpl,new_in,new_tpl_cycle):
+        df = pst.add_parameters(tpl,inf,pst_path=".")
+        pst.parameter_data.loc[df.parnme,"cycle"] = cy
+        pst.parameter_data.loc[df.parnme,"partrans"] = "fixed"
+
+    #write par cycle table
+    pers = org_sim.tdis.perioddata.array["perlen"]
+    #pers[0] = 1000
+    pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
+    pdf.loc['perlen',:] = pers
+    pdf.to_csv(os.path.join(t_d,"par_cycle_table.csv"))
+    pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
+
+    # save this for later!
+    org_obs = pst.observation_data.copy()
+
+    # now drop all existing heads obs since those will be replaced by the state obs
+    fname = 'heads.csv'
+    fname_ins = fname + ".ins"
+    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+
+    sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
+    sfr = sfr.drop(['time'], axis=1)
+    nms = sfr.columns.to_series()
+    fname = 'sfr.csv'
+    fname_ins = fname + ".ins"
+    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+    with open(os.path.join(t_d, fname_ins), 'w') as f:
+        f.write("pif ~\n")
+        f.write("l1 \n")
+        f.write("l1")
+        for i in range(sfr.shape[1]):
+            oname = "{0}".format(nms[i])
+            f.write(" ~,~ !{0}! ".format(oname))
+    new_ins_files = [os.path.join(t_d, fname_ins)]
+    new_out = [os.path.join(t_d, "sfr.csv")]
+    new_ins_cycle = [-1]
+
+    #add sfr obs
+    for ins_file in new_ins_files:
+        pst.add_observations(ins_file,pst_path=".")
+
+    pst.observation_data.loc[:,'cycle'] = -1
+    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:trgw"),:].copy()
+    tr_obs.loc[tr_obs.obsnme,"time"] = tr_obs.obsnme.apply(lambda x: x.split(':')[-1])
+    tr_obs.loc[tr_obs.obsnme,"k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
+    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
+    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[4]))
+    tr_obs.loc[tr_obs.obsnme,"obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
+
+    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("head_"),:].copy()
+    head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
+    head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
+    head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
+
+    obs_heads = {}
+    odf_names = []
+    pst.observation_data.loc[:,"org_obgnme"] = np.NaN
+    pst.observation_data.loc[:, "weight"] = 0.0
+    pst.observation_data.loc["gage_1", "weight"] = 1.0
+
+    for og in tr_obs.obgnme.unique():
+        site_obs = tr_obs.loc[tr_obs.obgnme==og,:]
+        site_obs.sort_values(by="time",inplace=True)
+        head_name = "head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0],site_obs.i[0],site_obs.j[0])
+        for i,oname in enumerate(site_obs.obsnme):
+            obs_heads[oname] = (head_name,i)
+        # assign max weight in the control file since some have zero weight and
+        # we are covering weights in the weight table
+        pst.observation_data.loc[head_name,"weight"] = site_obs.weight.max()
+        pst.observation_data.loc[head_name,"org_obgnme"] = og
+        odf_names.append(head_name)
+    odf_names.append("gage_1")
+
+    odf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    wdf = pd.DataFrame(columns=odf_names,index=np.arange(25))
+    for tr_name,(head_name,icycle) in obs_heads.items():
+        odf.loc[icycle, head_name] = org_obs.loc[tr_name, "obsval"]
+        if icycle > 12:
+            wdf.loc[icycle, head_name] = 0
+        else:
+            wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
+
+    g_obs = org_obs.loc[org_obs.obsnme.str.startswith("sfr_usecol:gage_1"),:].copy()
+    #give these obs the max weight since some have zero weight
+    # pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
+    g_obs.sort_index(inplace=True)
+    for i,name in enumerate(g_obs.obsnme):
+        odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
+        if i > 12:
+            wdf.loc[i, "gage_1"] = 0
+        else:
+            wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
+
+
+
+    odf.T.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
+    pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
+    wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
+    pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
+
+    # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
+    pst.model_input_data.loc[:, "cycle"] = -1
+    for i in range(len(pst.model_input_data)):
+        if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
+            cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
+            pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        if pst.model_input_data.iloc[i,0].startswith('twel_mlt'):
+            cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
+            pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i,1] = pst.model_input_data.iloc[i,1].replace(str(cy),"1")
+        elif 'rch_recharge' in pst.model_input_data.iloc[i,0] and "cn" in pst.model_input_data.iloc[i,0]:
+            cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
+            pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+
+    pst.model_output_data.loc[:,"cycle"] = -1
+
+    # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
+    # should get a cycle value of -1.
+    pst.parameter_data.loc[:, "cycle"] = -1
+
+    for i in range(len(pst.parameter_data)):
+        if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
+            pst.parameter_data.iloc[i, 22] = cy - 1
+        elif pst.parameter_data.iloc[i,0].startswith('twel_mlt'):
+            cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
+            pst.parameter_data.iloc[i, 22] = cy - 1
+        elif 'rch_recharge' in pst.parameter_data.iloc[i,0] and "cn" in pst.parameter_data.iloc[i,0]:
+            cy = int(pst.parameter_data.iloc[i,0].split('_')[4])
+            pst.parameter_data.iloc[i, 22] = cy - 1
+
+    #pst.observation_data.loc[:, "state_par_link"] = ''
+    # print(pst.observation_data.iloc[2429,:])
+    #for i in range(len(pst.observation_data)):
+    #    if pst.observation_data.iloc[i, 0].startswith('head_'):
+    #        pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
+
+    pst.control_data.noptmax = 3
+    # # pst.pestpp_options["ies_num_reals"] = 3
+    pst.pestpp_options["da_num_reals"] = 50
+    # # if not sync_state_names:
+    # #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
+    # #     obs = pst.observation_data
+    # #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
+    print(pst.nnz_obs_names)
+    pst.write(os.path.join(t_d,"freyberg6_run_da.pst"),version=2)
+    # return pst
+
+    # fill any missing pars with ctl file values (esp the perlen par)
+    pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(t_d,"prior.jcb"))
+    pepars = set(pe.columns.tolist())
+    pstpars = set(pst.par_names)
+    par = pst.parameter_data
+    d = pepars.symmetric_difference(pstpars)
+    missing = par.loc[par.parnme.apply(lambda x: x in d),"parnme"]
+    mvals = par.parval1.loc[missing]
+    pe.loc[:,missing] = np.NaN
+    for idx in pe.index:
+        pe.loc[idx,missing] = mvals
+    pe.to_binary(os.path.join(t_d,"prior.jcb"))
+
+    pst.pestpp_options["da_num_reals"] = 100
+    pst.control_data.noptmax = 3
+    pst.write(os.path.join(t_d,"test.pst"),version=2)
+    #pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+    return
+    pst.pestpp_options["da_num_reals"] = 100
+    pst.write(os.path.join(t_d, "test.pst"), version=2)
+    pyemu.os_utils.start_workers(t_d,"pestpp-da","test.pst",num_workers=10,master_dir=t_d+"prior_test")
 
 if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
     setup_interface("daily_model_files")
-    run_complex_prior_mc('daily_model_files_template')
-    #monthly_ies_to_da()
+    #run_complex_prior_mc('daily_model_files_template')
+    monthly_ies_to_da("monthly_model_files_template")
     #compare_mf6_freyberg()
     exit()
 
