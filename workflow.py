@@ -1510,9 +1510,8 @@ def setup_interface(org_ws, num_reals=100):
     arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
     for arr_file in arr_files:
         # make sure each array file in nrow X ncol dimensions (not wrapped)
-        for arr_file in arr_files:
-            arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
-            np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+        arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+        np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
         k = int(arr_file.split('.')[0][-1]) - 1
         prefix = "head_k:{0}".format(k)
         pf.add_parameters(arr_file,par_type="grid",par_style="direct",pargp=prefix,par_name_base=prefix,transform="none",
