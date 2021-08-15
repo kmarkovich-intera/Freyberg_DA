@@ -534,27 +534,34 @@ def process_complex_target_output(c_d, s_d, d_d, real):
     sfr_f.loc[:, "org_time"] = sfr_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
     sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}_{1}".format(x.type, x.org_time), axis=1)
     
-    pst = pyemu.Pst(os.path.join(s_d, 'freyberg6_run_ies.pst'))
+    pst = pyemu.Pst(os.path.join(s_d, 'freyberg.pst'))
     obs_s = pst.observation_data
-    
+
     for j in range(len(hds_f)):
-        for i in range(len(obs_s)):
-            if obs_s.obsnme[i] in hds_f.org_obgnme[j]:
+        cv = str(hds_f.org_obgnme[j])
+        for i,sv in enumerate(obs_s.obsnme):
+            if sv in cv:
                 obs_s.obsval[i] = hds_f.iloc[j, real]
+                break
 
     for j in range(len(sfr_f)):
-        for i in range(len(obs_s)):
-            if obs_s.obsnme[i] in sfr_f.org_obgnme[j]:
+        cv = str(sfr_f.org_obgnme[j])
+        for i, sv in enumerate(obs_s.obsnme):
+            if sv in cv:
                 obs_s.obsval[i] = sfr_f.iloc[j, real]
+                break
+
                 
     #write pst files to template ies dir (for current real)
-    m_ies_dir = os.path.join('simple_template_ies_{0}'.format(real)) 
+    m_ies_dir = os.path.join('simple_template_ies_{0}'.format(real))
+    if os.path.exists(m_ies_dir):
+        shutil.rmtree(m_ies_dir)
     shutil.copytree(s_d,m_ies_dir)         
-    pst.write(os.path.join(m_ies_dir,"freyberg6_run_ies.pst"),version=2)
+    pst.write(os.path.join(m_ies_dir,"freyberg.pst"),version=2)
     
     # process for SEQ
     redis_fac = 3
-    pst = pyemu.Pst(os.path.join(d_d, "freyberg6_run_da2.pst"))
+    pst = pyemu.Pst(os.path.join(d_d, "freyberg.pst"))
     
     start_date = pd.to_datetime('20151231', format='%Y%m%d')
     dates = pd.date_range(start='2015-12-31', periods=25,freq='M').strftime("%Y%m%d")
@@ -591,21 +598,23 @@ def process_complex_target_output(c_d, s_d, d_d, real):
     sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
     
     for i in range(25):
-        for j in range(len(hds_f)):
+        for j,(cv,ct) in enumerate(zip(hds_f.org_obgnme,hds_f.org_time)):
             for k in range(2):
-                if obs_d.iloc[k,0] in hds_f.org_obgnme[j] and obs_d.iloc[3,i] == hds_f.org_time[j]:
+                if obs_d.iloc[k,0] in cv and obs_d.iloc[3,i] == ct:
                     obs_d.iloc[k,i] = hds_f.iloc[j, real]
     
     for i in range(25):
-        for j in range(len(sfr_f)):
-                if obs_d.iloc[2,0] in sfr_f.org_obgnme[j] and obs_d.iloc[3,i] == sfr_f.org_time[j]:
+        for j,(cv,ct) in enumerate(zip(hds_f.org_obgnme,hds_f.org_time)):
+                if obs_d.iloc[2,0] in cv and obs_d.iloc[3,i] == ct:
                     obs_d.iloc[2,i] = sfr_f.iloc[j, real]
     obs_d = obs_d.drop(['date'], axis = 0)
     
     #write pst files and obs cycle table to master da dir (for current real)
-    m_da_dir = os.path.join('simple_template_da_{0}'.format(real)) 
+    m_da_dir = os.path.join('simple_template_da_{0}'.format(real))
+    if os.path.exists(m_da_dir):
+        shutil.rmtree(m_ies_dir)
     shutil.copytree(d_d,m_da_dir)         
-    pst.write(os.path.join(m_da_dir,"freyberg6_run_da.pst"),version=2)
+    pst.write(os.path.join(m_da_dir,"freyberg.pst"),version=2)
     obs_d.to_csv(os.path.join(m_da_dir,'obs_cycle_tbl.csv'), index=False)
 
     
@@ -671,13 +680,15 @@ def balance_weights(ireal):
 def compare_mf6_freyberg():
     for ireal in range(100):
         complex_dir = os.path.join('complex_master')
-        ies_dir = os.path.join('simple_template_ies')
-        da_dir = os.path.join('simple_template_da')
+        # ies_dir = os.path.join('simple_template_ies')
+        # da_dir = os.path.join('simple_template_da')
+        ies_dir = os.path.join('monthly_template')
+        da_dir = os.path.join('seq_monthly_template')
         
         process_complex_target_output(complex_dir, ies_dir, da_dir, ireal)
         
         balance_weights(ireal)
-        
+        return
         #run batch and sequential simple models 
         #ies stuff 
         ies_t_d = os.path.join('simple_template_ies_{0}'.format(ireal))
@@ -1348,20 +1359,228 @@ def monthly_ies_to_da(org_d="monthly_template"):
 
     pe.to_binary(os.path.join(t_d,"prior.jcb"))
 
-    pst.pestpp_options["da_num_reals"] = 3
-    pst.control_data.noptmax = -1
+    pst.pestpp_options["da_num_reals"] = 100
+    pst.control_data.noptmax = 3
     pst.write(os.path.join(t_d,"test.pst"),version=2)
-    pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
+    #pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
     return
     pst.pestpp_options["da_num_reals"] = 100
     pst.write(os.path.join(t_d, "test.pst"), version=2)
     pyemu.os_utils.start_workers(t_d,"pestpp-da","test.pst",num_workers=10,master_dir=t_d+"prior_test")
 
+def test_extract_state_obs(t_d):
+    cwd = os.getcwd()
+    os.chdir(t_d)
+    fnames = extract_state_obs()
+    os.chdir(cwd)
+    return fnames
+
+
+def extract_state_obs():
+    hds = flopy.utils.HeadFile('freyberg6_freyberg.hds')
+    arr = hds.get_data()
+    fnames = []
+    for k,a in enumerate(arr):
+        fname = 'heads_'+str(k)+'.dat'
+        np.savetxt(fname,a,fmt='%15.6E')
+        fnames.append(fname)
+    return fnames
+
+def setup_interface(org_ws, num_reals=100):
+    """copied from auto_pest.py
+
+    """
+    np.random.seed(123456)
+
+    # run mf6
+    tmp_ws = org_ws + "_temp"
+    if os.path.exists(tmp_ws):
+        shutil.rmtree(tmp_ws)
+    shutil.copytree(org_ws,tmp_ws)
+    pyemu.os_utils.run("mf6",cwd=tmp_ws)
+
+    # load the mf6 model with flopy to get the spatial reference
+    sim = flopy.mf6.MFSimulation.load(sim_ws=tmp_ws)
+    m = sim.get_model("freyberg6")
+
+    # work out the spatial rediscretization factor
+    redis_fac = m.dis.nrow.data / 40
+
+    # where the pest interface will be constructed
+    template_ws = org_ws + "_template"
+
+    # instantiate PstFrom object
+    pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
+                                  remove_existing=True,
+                                  longnames=True, spatial_reference=m.modelgrid,
+                                  zero_based=False, start_datetime="1-1-2018")
+
+    # add observations from the sfr observation output file
+    df = pd.read_csv(os.path.join(template_ws, "sfr.csv"), index_col=0)
+    pf.add_observations("sfr.csv", insfile="sfr.csv.ins", index_cols="time",
+                        use_cols=list(df.columns.values),
+                        prefix="sfr")
+
+    # add observations for the heads observation output file
+    df = pd.read_csv(os.path.join(template_ws, "heads.csv"), index_col=0)
+    pf.add_observations("heads.csv", insfile="heads.csv.ins",
+                        index_cols="time", use_cols=list(df.columns.values),
+                        prefix="hds")
+
+    # add observations for simulated states
+    pf.add_py_function("workflow.py","extract_state_obs()",is_pre_cmd=False)
+    fnames = test_extract_state_obs(template_ws)
+    for k,fname in enumerate(fnames):
+        prefix = "head_k:{0}".format(k)
+        pf.add_observations(fname,prefix=prefix,obsgp=prefix)
+
+
+    # the geostruct object for grid-scale parameters
+    grid_v = pyemu.geostats.ExpVario(contribution=1.0, a=500)
+    grid_gs = pyemu.geostats.GeoStruct(variograms=grid_v)
+
+    # the geostruct object for pilot-point-scale parameters
+    pp_v = pyemu.geostats.ExpVario(contribution=1.0, a=2000)
+    pp_gs = pyemu.geostats.GeoStruct(variograms=pp_v)
+
+    # the geostruct for recharge grid-scale parameters
+    rch_v = pyemu.geostats.ExpVario(contribution=1.0, a=1000)
+    rch_gs = pyemu.geostats.GeoStruct(variograms=rch_v)
+
+    # the geostruct for temporal correlation
+    temporal_gs = pyemu.geostats.GeoStruct(variograms=pyemu.geostats.ExpVario(contribution=1.0, a=60))
+
+    # import flopy as part of the forward run process
+    pf.extra_py_imports.append('flopy')
+
+    # use the idomain array for masking parameter locations
+    ib = m.dis.idomain[0].array
+
+    # define a dict that contains file name tags and lower/upper bound information
+    tags = {"npf_k_": [0.1, 10.], "npf_k33_": [.1, 10], "sto_ss": [.1, 10], "sto_sy": [.9, 1.1],
+            "rch_recharge": [.5, 1.5]}
+    dts = pd.to_datetime("1-1-2018") + \
+          pd.to_timedelta(np.cumsum(sim.tdis.perioddata.array["perlen"]), unit="d")
+
+    # loop over each tag, bound info pair
+    for tag, bnd in tags.items():
+        lb, ub = bnd[0], bnd[1]
+        # find all array based files that have the tag in the name
+        arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
+
+        if len(arr_files) == 0:
+            print("warning: no array files found for ", tag)
+            continue
+
+        # make sure each array file in nrow X ncol dimensions (not wrapped)
+        for arr_file in arr_files:
+            arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+            np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+
+        # if this is the recharge tag
+        if "rch" in tag:
+            # add one set of grid-scale parameters for all files
+            pf.add_parameters(filenames=arr_files, par_type="grid", par_name_base="rch_gr",
+                              pargp="rch_gr", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                              geostruct=rch_gs)
+
+            # add one constant parameter for each array, and assign it a datetime
+            # so we can work out the temporal correlation
+            for arr_file in arr_files:
+                kper = int(arr_file.split('.')[1].split('_')[-1]) - 1
+                pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
+                                  pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                                  geostruct=temporal_gs,
+                                  datetime=dts[kper])
+        # otherwise...
+        else:
+            # for each array add both grid-scale and pilot-point scale parameters
+            for arr_file in arr_files:
+                pf.add_parameters(filenames=arr_file, par_type="grid", par_name_base=arr_file.split('.')[1] + "_gr",
+                                  pargp=arr_file.split('.')[1] + "_gr", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                                  geostruct=grid_gs)
+                pf.add_parameters(filenames=arr_file, par_type="pilotpoints",
+                                  par_name_base=arr_file.split('.')[1] + "_pp",
+                                  pargp=arr_file.split('.')[1] + "_pp", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                                  pp_space=int(5 * redis_fac), geostruct=pp_gs)
+
+
+    #add direct pars for the ic strt values
+    tag = "ic_strt"
+    arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
+    for arr_file in arr_files:
+        k = int(arr_file.split('.')[0][-1]) - 1
+        prefix = "head_k:{0}".format(k)
+        pf.add_parameters(arr_file,par_type="grid",par_style="direct",pargp=prefix,par_name_base=prefix,transform="none",
+                          lower_bound=-10000,upper_bound=10000)
+
+    # get all the list-type files associated with the wel package
+    list_files = [f for f in os.listdir(org_ws) if "freyberg6.wel_stress_period_data_" in f and f.endswith(".txt")]
+    # for each wel-package list-type file
+    for list_file in list_files:
+        kper = int(list_file.split(".")[1].split('_')[-1]) - 1
+        # add spatially constant, but temporally correlated parameter
+        pf.add_parameters(filenames=list_file, par_type="constant", par_name_base="twel_mlt_{0}".format(kper),
+                          pargp="twel_mlt".format(kper), index_cols=[0, 1, 2], use_cols=[3],
+                          upper_bound=1.5, lower_bound=0.5, datetime=dts[kper], geostruct=temporal_gs)
+
+        # add temporally indep, but spatially correlated grid-scale parameters, one per well
+        pf.add_parameters(filenames=list_file, par_type="grid", par_name_base="wel_grid_{0}".format(kper),
+                          pargp="wel_{0}".format(kper), index_cols=[0, 1, 2], use_cols=[3],
+                          upper_bound=1.5, lower_bound=0.5)
+
+    # add grid-scale parameters for SFR reach conductance.  Use layer, row, col and reach
+    # number in the parameter names
+    pf.add_parameters(filenames="freyberg6.sfr_packagedata.txt", par_name_base="sfr_rhk",
+                      pargp="sfr_rhk", index_cols=[0, 1, 2, 3], use_cols=[9], upper_bound=10.,
+                      lower_bound=0.1,
+                      par_type="grid")
+
+    # add model run command
+    pf.mod_sys_cmds.append("mf6")
+
+    # build pest control file
+    pst = pf.build_pst('freyberg.pst')
+
+    # draw from the prior and save the ensemble in binary format
+    pe = pf.draw(num_reals, use_specsim=True)
+    pe.to_binary(os.path.join(template_ws, "prior.jcb"))
+
+    # set some algorithmic controls
+    pst.control_data.noptmax = 0
+    pst.pestpp_options["additional_ins_delimiters"] = ","
+
+    # write the control file
+    pst.write(os.path.join(pf.new_d, "freyberg.pst"))
+
+    # run with noptmax = 0
+    pyemu.os_utils.run("{0} freyberg.pst".format(
+        os.path.join("pestpp-ies")), cwd=pf.new_d)
+
+    # make sure it ran
+    res_file = os.path.join(pf.new_d, "freyberg.base.rei")
+    assert os.path.exists(res_file), res_file
+    pst.set_res(res_file)
+    print(pst.phi)
+
+
+    pst.control_data.noptmax = -1
+
+    # define what file has the prior parameter ensemble
+    pst.pestpp_options["ies_par_en"] = "prior.jcb"
+
+    # write the updated pest control file
+    pst.write(os.path.join(pf.new_d, "freyberg.pst"))
+
 
 
 if __name__ == "__main__":
 
-    monthly_ies_to_da()
+    setup_interface("monthly_model_files")
+    #setup_interface("daily_model_files")
+
+    #monthly_ies_to_da()
+    #compare_mf6_freyberg()
     exit()
 
     # invest()
