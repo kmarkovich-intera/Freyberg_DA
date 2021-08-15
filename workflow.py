@@ -757,7 +757,7 @@ def compare_mf6_freyberg():
                                 
 def run_complex_prior_mc(c_t):
     pyemu.os_utils.start_workers(c_t,"pestpp-ies","freyberg.pst",num_workers=10,worker_root=".",
-                                 master_dir=c_t.replace("template","master"))
+                                 master_dir=c_t.replace("template","master_prior"))
     
 def plot_phi_seq_bat():
     seq_phi_master = []
@@ -1514,8 +1514,12 @@ def setup_interface(org_ws, num_reals=100):
         np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
         k = int(arr_file.split('.')[1][-1]) - 1
         prefix = "head_k:{0}".format(k)
+        zn_arr = np.ones_like(arr,dtype=int)
+        zn_arr[arr<0] = 0
+        zn_arr[arr>1000] = 0
         pf.add_parameters(arr_file,par_type="grid",par_style="direct",pargp=prefix,par_name_base=prefix,transform="none",
-                          lower_bound=-10000,upper_bound=10000,zone_array=ib)
+                          lower_bound=-10000,upper_bound=10000,zone_array=zn_arr)
+
 
     # get all the list-type files associated with the wel package
     list_files = [f for f in os.listdir(org_ws) if "freyberg6.wel_stress_period_data_" in f and f.endswith(".txt")]
@@ -1544,19 +1548,17 @@ def setup_interface(org_ws, num_reals=100):
 
     # build pest control file
     pst = pf.build_pst('freyberg.pst')
-
+    par = pst.parameter_data
+    strt_pars = par.loc[par.parnme.str.contains("head_k"), "parnme"]
 
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
-
     # replace the ic strt pars with the control file values
-    par = pst.parameter_data
-    strt_pars = par.loc[par.parnme.str.contains("head_k"),"parnme"]
+
     print(strt_pars)
     for idx in pe.index:
         pe.loc[idx,strt_pars] = par.loc[strt_pars,"parval1"]
     par.loc[strt_pars,"parchglim"] = "relative"
-
     pe.to_binary(os.path.join(template_ws, "prior.jcb"))
 
     # set some algorithmic controls
@@ -1570,10 +1572,15 @@ def setup_interface(org_ws, num_reals=100):
     for v in ["k","i","j"]:
         state_par.loc[:,v] = state_par.loc[:,v].apply(int)
         state_obs.loc[:, v] = state_obs.loc[:, v].apply(int)
-    state_par_dict = {(k,i,j):n for k,i,j,n in zip(state_par.k,state_par.i,state_par.j,state_par.parnme)}
+    state_par_dict = {"{0}_{1}_{2}".format(k,i,j):n for k,i,j,n in zip(state_par.k,state_par.i,state_par.j,state_par.parnme)}
     obs.loc[:,"state_par_link"] = np.nan
-    obs.loc[state_obs.obsnme,"state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.k,x.j,x.i),np.nan),axis=1)
-    print(obs.state_par_link.dropna())
+    state_obs.loc[:,"kij"] = state_obs.apply(lambda x: "{0}_{1}_{2}".format(x.k,x.i,x.j),axis=1)
+
+    #for kij,n in state_par_dict.items():
+    #    if kij not in state_obs.kij:
+    #        print(kij,n)
+    obs.loc[state_obs.obsnme,"state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.kij),np.nan),axis=1)
+    print(obs.state_par_link.dropna().shape)
 
 
     # write the control file
@@ -1822,13 +1829,32 @@ def run_batch_seq_prior_monte_carlo():
                                  master_dir=t_d.replace("template", "master_prior"))
 
 
+def plot_prior_mc():
+	c_m_d = "daily_model_files_master_prior"
+	s_b_m_d = "monthly_model_files_master_prior"
+	s_s_m_d = "seq_monthly_model_files_master_prior"
+
+	c_pst = pyemu.Pst(os.path.join(c_m_d,"freyberg.pst"))
+	s_b_pst = pyemu.Pst(os.path.join(s_b_m_d,"freyberg.pst"))
+	c_oe = pd.read_csv(os.path.join(c_m_d,"freyberg.0.obs.csv"),index_col=0)
+	s_b_oe = pd.read_csv(os.path.join(s_b_m_d,"freyberg.0.obs.csv"),index_col=0)
+
+
+	seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith*""]
+	s_s_oe_dict = {}
+
+
+
+
+
 if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
     monthly_ies_to_da("monthly_model_files_template")
-    run_batch_seq_prior_monte_carlo()
-    setup_interface("daily_model_files")
-    run_complex_prior_mc('daily_model_files_template')
+    #run_batch_seq_prior_monte_carlo()
+    #setup_interface("daily_model_files")
+    #run_complex_prior_mc('daily_model_files_template')
+    #plot_prior_mc()
     exit()
 
     # invest()
