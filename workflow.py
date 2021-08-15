@@ -1509,10 +1509,14 @@ def setup_interface(org_ws, num_reals=100):
     tag = "ic_strt"
     arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
     for arr_file in arr_files:
+        # make sure each array file in nrow X ncol dimensions (not wrapped)
+        for arr_file in arr_files:
+            arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+            np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
         k = int(arr_file.split('.')[0][-1]) - 1
         prefix = "head_k:{0}".format(k)
         pf.add_parameters(arr_file,par_type="grid",par_style="direct",pargp=prefix,par_name_base=prefix,transform="none",
-                          lower_bound=-10000,upper_bound=10000)
+                          lower_bound=-10000,upper_bound=10000,zone_array=ib)
 
     # get all the list-type files associated with the wel package
     list_files = [f for f in os.listdir(org_ws) if "freyberg6.wel_stress_period_data_" in f and f.endswith(".txt")]
@@ -1544,6 +1548,14 @@ def setup_interface(org_ws, num_reals=100):
 
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
+
+    # replace the ic strt pars with the control file values
+    par = pst.parameter_data
+    strt_pars = par.loc[par.parnme.str.contains("head_k"),"parnme"]
+    print(strt_pars)
+    for idx in pe.index:
+        pe.loc[idx,strt_pars] = par.loc[strt_pars,"parval1"]
+
     pe.to_binary(os.path.join(template_ws, "prior.jcb"))
 
     # set some algorithmic controls
@@ -1577,7 +1589,7 @@ def setup_interface(org_ws, num_reals=100):
 if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
-    #setup_interface("daily_model_files")
+    setup_interface("daily_model_files")
 
     #monthly_ies_to_da()
     #compare_mf6_freyberg()
