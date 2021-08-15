@@ -1807,22 +1807,28 @@ def monthly_ies_to_da(org_d):
         pe.loc[idx,missing] = mvals
     pe.to_binary(os.path.join(t_d,"prior.jcb"))
 
-    pst.pestpp_options["da_num_reals"] = 4
     pst.control_data.noptmax = 0
     pst.write(os.path.join(t_d,"test.pst"),version=2)
     pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
-    return
-    pst.pestpp_options["da_num_reals"] = 100
-    pst.write(os.path.join(t_d, "test.pst"), version=2)
-    pyemu.os_utils.start_workers(t_d,"pestpp-da","test.pst",num_workers=10,master_dir=t_d+"prior_test")
+
+
+def run_batch_seq_prior_monte_carlo():
+    t_d = "seq_monthly_model_files_template"
+    pyemu.os_utils.start_workers(t_d, "pestpp-da", "freyberg.pst", num_workers=10,
+                                 master_dir=t_d.replace("template", "master_prior"))
+
+    t_d = "monthly_model_files_template"
+    pyemu.os_utils.start_workers(t_d, "pestpp-ies", "freyberg.pst", num_workers=10,
+                                 master_dir=t_d.replace("template", "master_prior"))
+
 
 if __name__ == "__main__":
 
     setup_interface("monthly_model_files")
-    #setup_interface("daily_model_files")
-    #run_complex_prior_mc('daily_model_files_template')
     monthly_ies_to_da("monthly_model_files_template")
-    #compare_mf6_freyberg()
+    run_batch_seq_prior_monte_carlo()
+    setup_interface("daily_model_files")
+    run_complex_prior_mc('daily_model_files_template')
     exit()
 
     # invest()
