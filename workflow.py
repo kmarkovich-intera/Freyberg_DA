@@ -1491,11 +1491,22 @@ def setup_interface(org_ws, num_reals=100):
             # add one constant parameter for each array, and assign it a datetime
             # so we can work out the temporal correlation
             for arr_file in arr_files:
+                arr = np.loadtxt(os.path.join(template_ws, arr_file))
+                print(arr_file,arr.mean(),arr.std())
+                ub = arr.mean() * ub
+                lb = arr.mean() * lb
                 kper = int(arr_file.split('.')[1].split('_')[-1]) - 1
+                #pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
+                #                  pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                #                  geostruct=temporal_gs,
+                #                  datetime=dts[kper])
                 pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
                                   pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
                                   geostruct=temporal_gs,
-                                  datetime=dts[kper])
+                                  datetime=dts[kper],
+                                  par_style="direct")
+
+
         # otherwise...
         else:
             # for each array add both grid-scale and pilot-point scale parameters
@@ -1764,6 +1775,10 @@ def monthly_ies_to_da(org_d):
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
             pst.model_input_data.iloc[i, 2] = cy - 1
             pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        elif 'rch_recharge' in pst.model_input_data.iloc[i, 0] and pst.model_input_data.iloc[i, 0].endswith(".txt.tpl"):
+            cy = int(pst.model_input_data.iloc[i, 0].split('.')[1].split("_")[-1])
+            pst.model_input_data.iloc[i, 2] = cy - 1
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
 
     pst.model_output_data.loc[:, "cycle"] = -1
 
@@ -1782,21 +1797,9 @@ def monthly_ies_to_da(org_d):
             cy = int(pname.split('_')[4])
             pst.parameter_data.loc[pname, "cycle"] = cy - 1
 
-    # pst.observation_data.loc[:, "state_par_link"] = ''
-    # print(pst.observation_data.iloc[2429,:])
-    # for i in range(len(pst.observation_data)):
-    #    if pst.observation_data.iloc[i, 0].startswith('head_'):
-    #        pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
+
 
     pst.control_data.noptmax = 3
-    # # pst.pestpp_options["ies_num_reals"] = 3
-    #pst.pestpp_options["da_num_reals"] = 50
-    #pst.pestpp_options["da_num_reals"] = 50
-    # # if not sync_state_names:
-    # #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
-    # #     obs = pst.observation_data
-    # #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
-    print(pst.nnz_obs_names)
     pst.write(os.path.join(t_d, "freyberg.pst"), version=2)
     # return pst
 
@@ -1920,9 +1923,9 @@ def plot_prior_mc():
 
 if __name__ == "__main__":
 
-    #setup_interface("monthly_model_files")
-    #monthly_ies_to_da("monthly_model_files_template")
-    #run_batch_seq_prior_monte_carlo()
+    setup_interface("monthly_model_files")
+    monthly_ies_to_da("monthly_model_files_template")
+    run_batch_seq_prior_monte_carlo()
     # setup_interface("daily_model_files")
     # run_complex_prior_mc('daily_model_files_template')
     plot_prior_mc()
