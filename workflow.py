@@ -78,7 +78,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]+10000
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1])+10000)
     sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[1].split(':')[1]))
     sfr_f.type.replace('gage', 'gage_1')
     hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
@@ -135,7 +135,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
 
     for i in range(25):
-        obs_d.iloc[]
+        #obs_d.iloc[]
         obs_d.loc["org_obgnme"] = obs_d.apply(lambda x: "{0}_time:{1}".format(x.index, x.time), axis=0) 
         for j, (cv, ct) in enumerate(zip(hds_f.org_obgnme, hds_f.org_time)):
             for k in range(2):
