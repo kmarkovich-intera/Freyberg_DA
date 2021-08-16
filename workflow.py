@@ -1840,16 +1840,78 @@ def plot_prior_mc():
     s_s_m_d = "seq_monthly_model_files_master_prior"
 
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    obs = c_pst.observation_data
+    ctr_obs = obs.loc[obs.obsnme.str.contains("trgw"), :].copy()
+    ctr_obs.loc[:, "k"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[2]))
+    ctr_obs.loc[:, "i"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[3]))
+    ctr_obs.loc[:, "j"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[4]))
+    ctr_obs.loc[:, "time"] = ctr_obs.time.apply(float)
+    print(ctr_obs.obgnme.unique())
+
+
     s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+    obs = s_b_pst.observation_data
+    tr_obs = obs.loc[obs.obsnme.str.contains("trgw"),:].copy()
+    tr_obs.loc[:,"k"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[2]))
+    tr_obs.loc[:, "i"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[3]))
+    tr_obs.loc[:, "j"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[4]))
+    tr_obs.loc[:,"time"] = tr_obs.time.apply(float)
+
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
     s_b_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
 
     s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
-    seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f]
+    seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
     s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
-    oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
-    sobs = s_s_pst.observation_data.loc[oct.index,:].copy()
-    print(sobs)
+    #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
+
+    ognames = list(tr_obs.obgnme.unique())
+    ognames.sort()
+    ognames.append("sfr_usecol:gage_1")
+    with PdfPages("prior_obs_v_sim.pdf") as pdf:
+
+        for ogname in ognames:
+            sbobs = tr_obs.loc[tr_obs.obgnme == ogname, :].copy()
+
+            if "gage" in ogname:
+                seq_name ="gage_1"
+                cogname = ogname
+                sbobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obgnme==ogname,:].copy()
+                sbobs.loc[:,"time"] = sbobs.time.apply(float)
+                cobs = c_pst.observation_data.loc[c_pst.observation_data.obgnme == ogname, :].copy()
+                cobs.loc[:, "time"] = cobs.time.apply(float)
+
+            else:
+                sbobs = tr_obs.loc[tr_obs.obgnme == ogname, :].copy()
+                sbobs.sort_values(by="time", inplace=True)
+                k,i,j = sbobs.k.iloc[0],sbobs.i.iloc[0],sbobs.j.iloc[0]
+                seq_name = "arrobs_head_k:{0}_i:{1}_j:{2}".format(k,i,j)
+                cogname = "hds_usecol:trgw_{0}_{1}_{2}".format(k,2+(i*3),2+(j*3))
+                print(ogname,cogname)
+                cobs = ctr_obs.loc[ctr_obs.obgnme==cogname,:].copy()
+            sbobs.sort_values(by="time", inplace=True)
+            cobs.sort_values(by="time",inplace=True)
+
+
+            fig,ax = plt.subplots(1,1,figsize=(8,8))
+
+            [ax.plot(cobs.time, c_oe.loc[idx, cobs.obsnme], "b", lw=0.05) for idx in c_oe.index]
+
+            [ax.plot(sbobs.time,s_b_oe.loc[idx,sbobs.obsnme],"0.5",lw=0.05) for idx in s_b_oe.index]
+            for itime,time in enumerate(sbobs.time):
+                oe = s_s_oe_dict[itime]
+                #print(oe.loc[:,seq_name])
+                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5", lw=0.1)
+
+
+            ax.set_title(ogname)
+            if "gage" not in ogname:
+                ax.set_ylim(30,ax.get_ylim()[1])
+            pdf.savefig()
+            plt.close(fig)
+
+
+
 
 
 
@@ -1859,8 +1921,8 @@ def plot_prior_mc():
 if __name__ == "__main__":
 
     #setup_interface("monthly_model_files")
-    monthly_ies_to_da("monthly_model_files_template")
-    run_batch_seq_prior_monte_carlo()
+    #monthly_ies_to_da("monthly_model_files_template")
+    #run_batch_seq_prior_monte_carlo()
     # setup_interface("daily_model_files")
     # run_complex_prior_mc('daily_model_files_template')
     plot_prior_mc()
