@@ -1923,11 +1923,11 @@ def plot_prior_mc():
 
 if __name__ == "__main__":
 
-    #setup_interface("monthly_model_files")
-    #monthly_ies_to_da("monthly_model_files_template")
-    #run_batch_seq_prior_monte_carlo()
-    # setup_interface("daily_model_files")
-    # run_complex_prior_mc('daily_model_files_template')
+    setup_interface("monthly_model_files")
+    monthly_ies_to_da("monthly_model_files_template")
+    run_batch_seq_prior_monte_carlo()
+    setup_interface("daily_model_files")
+    run_complex_prior_mc('daily_model_files_template')
     plot_prior_mc()
     exit()
 
