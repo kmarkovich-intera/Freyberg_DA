@@ -71,14 +71,14 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
     hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
     hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+1000
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+10000
     hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
     hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
     hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
     hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]+1000
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]+10000
     sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[1].split(':')[1]))
     sfr_f.type.replace('gage', 'gage_1')
     hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
@@ -100,27 +100,27 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     pst.write(os.path.join(m_ies_dir,"freyberg6_run_bat.pst"),version=2)
 
     # process for SEQ
+    sim = flopy.mf6.MFSimulation.load(sim_ws=s_d)
+    perlen = sim.tdis.perioddata.array["perlen"]
+    
     pst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
 
-    # load in obs cycle table
+    # load in obs data and obs cycle table
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
     oe_f = oe_f.T
-    obs_d = pd.read_csv(os.path.join(s_d, 'obs_cycle_table.csv'))
-#     obs_d.loc["date", 1:] = dates
+    obs_d = pd.read_csv(os.path.join(s_d, 'obs_cycle_tbl.csv'))
+    obs_d.loc["time", 1:] = perlen 
 
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
     hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
     hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+1000
-#     time = hds_f.loc[:, "time"]
-#     time = pd.to_timedelta(time.values - 1, unit='D')
-#     hds_f.loc[:, "org_time"] = start_date + time.values
-#     hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+10000
     hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
     hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
-    hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "arrobs_head_k:{0}_i:{1}_j:{2}".format(int(x.k), int(x.org_i-1), int(x.org_j-1)), axis=1)
+    hds_dct = dict(zip(hds_f.org_obgnme, hds_f.time, hds_f.iloc[:,real]))
+
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
     sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
@@ -135,6 +135,8 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
 
     for i in range(25):
+        obs_d.iloc[]
+        obs_d.loc["org_obgnme"] = obs_d.apply(lambda x: "{0}_time:{1}".format(x.index, x.time), axis=0) 
         for j, (cv, ct) in enumerate(zip(hds_f.org_obgnme, hds_f.org_time)):
             for k in range(2):
                 if obs_d.iloc[k, 0] in cv and obs_d.iloc[3, i] == ct:
@@ -152,7 +154,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
         shutil.rmtree(m_ies_dir)
     shutil.copytree(s_d, m_da_dir)
     pst.write(os.path.join(m_da_dir, "freyberg6_run_seq.pst"), version=2)
-    obs_d.to_csv(os.path.join(m_da_dir, 'obs_cycle_table.csv'), index=False)
+    obs_d.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
 
 
 def balance_weights(ireal):
@@ -179,7 +181,7 @@ def balance_weights(ireal):
 #     start_date = pd.to_datetime('20151231', format='%Y%m%d')
 #     dates = pd.date_range(start='2015-12-31', periods=25, freq='M').strftime("%Y%m%d")
 
-    da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_table.csv'))
+    da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'))
 
     hds_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("trgw")), :].copy()
     hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: x.split('_')[-1])
@@ -209,7 +211,7 @@ def balance_weights(ireal):
             if sfr_f.iloc[k, 5] == m:
                 da_wt.iloc[2, m] = sfr_f.iloc[k, 2]
 
-    da_wt.to_csv(os.path.join(da_dir, 'weight_cycle_table.csv'), index=False)
+    da_wt.to_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'), index=False)
 
 
 def compare_mf6_freyberg():
