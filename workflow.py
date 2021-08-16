@@ -1493,15 +1493,15 @@ def setup_interface(org_ws, num_reals=100):
             for arr_file in arr_files:
                 arr = np.loadtxt(os.path.join(template_ws, arr_file))
                 print(arr_file,arr.mean(),arr.std())
-                ub = arr.mean() * ub
-                lb = arr.mean() * lb
+                uub = arr.mean() * ub
+                llb = arr.mean() * lb
                 kper = int(arr_file.split('.')[1].split('_')[-1]) - 1
                 #pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
                 #                  pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
                 #                  geostruct=temporal_gs,
                 #                  datetime=dts[kper])
                 pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
-                                  pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                                  pargp="rch_const", zone_array=ib, upper_bound=uub, lower_bound=llb,
                                   geostruct=temporal_gs,
                                   datetime=dts[kper],
                                   par_style="direct")
