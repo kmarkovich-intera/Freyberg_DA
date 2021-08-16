@@ -83,11 +83,9 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     sfr_f.type.replace('gage', 'gage_1')
     hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
     sfr_dct = dict(zip(sfr_f.org_obgnme, sfr_f.iloc[:,real]))
-    print(sfr_dct)
 
     pst = pyemu.Pst(os.path.join(s_d, 'freyberg.pst'))
     obs_s = pst.observation_data
-    print(obs_s.obsval)
 
     for i in range(len(obs_s)):
         if obs_s.obsnme[i].startswith('hds'):
@@ -102,27 +100,27 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     pst.write(os.path.join(m_ies_dir,"freyberg6_run_bat.pst"),version=2)
 
     # process for SEQ
-    pst = pyemu.Pst(os.path.join(d_d, "freyberg.pst"))
+    pst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
 
     # load in obs cycle table
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
     oe_f = oe_f.T
-    obs_d = pd.read_csv(os.path.join(d_d, 'obs_cycle_tbl.csv'))
-    obs_d.loc["date", 1:] = dates
+    obs_d = pd.read_csv(os.path.join(s_d, 'obs_cycle_table.csv'))
+#     obs_d.loc["date", 1:] = dates
 
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    time = hds_f.loc[:, "time"]
-    time = pd.to_timedelta(time.values - 1, unit='D')
-    hds_f.loc[:, "org_time"] = start_date + time.values
-    hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
-    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "head_{:02d}_{:03d}_{:03d}".format(x.k, x.org_i, x.org_j),
-                                             axis=1)
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+1000
+#     time = hds_f.loc[:, "time"]
+#     time = pd.to_timedelta(time.values - 1, unit='D')
+#     hds_f.loc[:, "org_time"] = start_date + time.values
+#     hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
+    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
+    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
+    hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
     sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
@@ -149,18 +147,18 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     obs_d = obs_d.drop(['date'], axis=0)
 
     # write pst files and obs cycle table to master da dir (for current real)
-    m_da_dir = os.path.join('simple_template_da_{0}'.format(real))
+    m_da_dir = os.path.join('seq_monthly_template_{0}'.format(real))
     if os.path.exists(m_da_dir):
         shutil.rmtree(m_ies_dir)
     shutil.copytree(s_d, m_da_dir)
-    pst.write(os.path.join(m_da_dir, "freyberg.pst"), version=2)
-    obs_d.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
+    pst.write(os.path.join(m_da_dir, "freyberg6_run_seq.pst"), version=2)
+    obs_d.to_csv(os.path.join(m_da_dir, 'obs_cycle_table.csv'), index=False)
 
 
 def balance_weights(ireal):
-    ies_dir = os.path.join('simple_template_ies_{0}'.format(ireal))
-    da_dir = os.path.join('simple_template_da_{0}'.format(ireal))
-    ies_file = 'freyberg6_run_ies.pst'
+    ies_dir = os.path.join('bat_monthly_template_{0}'.format(ireal))
+    da_dir = os.path.join('seq_monthly_template_{0}'.format(ireal))
+    ies_file = 'freyberg6_run_bat.pst'
 
     # run pestpp ies to get phi
     pyemu.os_utils.run("pestpp-ies.exe {0}".format(ies_file), cwd=ies_dir)
@@ -178,10 +176,10 @@ def balance_weights(ireal):
     pst.write(os.path.join(ies_dir, ies_file), version=2)
 
     # modify da weight cycle table based on new weights
-    start_date = pd.to_datetime('20151231', format='%Y%m%d')
-    dates = pd.date_range(start='2015-12-31', periods=25, freq='M').strftime("%Y%m%d")
+#     start_date = pd.to_datetime('20151231', format='%Y%m%d')
+#     dates = pd.date_range(start='2015-12-31', periods=25, freq='M').strftime("%Y%m%d")
 
-    da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'))
+    da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_table.csv'))
 
     hds_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("trgw")), :].copy()
     hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: x.split('_')[-1])
@@ -211,29 +209,27 @@ def balance_weights(ireal):
             if sfr_f.iloc[k, 5] == m:
                 da_wt.iloc[2, m] = sfr_f.iloc[k, 2]
 
-    da_wt.to_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'), index=False)
+    da_wt.to_csv(os.path.join(da_dir, 'weight_cycle_table.csv'), index=False)
 
 
 def compare_mf6_freyberg():
     for ireal in range(100):
         complex_dir = os.path.join('complex_master')
-        # ies_dir = os.path.join('simple_template_ies')
-        # da_dir = os.path.join('simple_template_da')
-        ies_dir = os.path.join('monthly_template')
-        da_dir = os.path.join('seq_monthly_template')
+        bat_dir = os.path.join('monthly_model_files_template')
+        seq_dir = os.path.join('seq_monthly_model_files_template')
 
-        process_complex_target_output(complex_dir, ies_dir, da_dir, ireal)
+        process_complex_target_output(complex_dir, bat_dir, seq_dir, ireal)
 
         balance_weights(ireal)
         return
         # run batch and sequential simple models
         # ies stuff
-        ies_t_d = os.path.join('simple_template_ies_{0}'.format(ireal))
-        ies_pst = pyemu.Pst(os.path.join(ies_t_d, "freyberg6_run_ies.pst"))
+        ies_t_d = os.path.join('bat_monthly_template_{0}'.format(ireal))
+        ies_pst = pyemu.Pst(os.path.join(ies_t_d, "freyberg6_run_bat.pst"))
 
         # prep that prior ensemble for da
-        da_t_d = os.path.join('simple_template_da_{0}'.format(ireal))
-        da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg6_run_da.pst"))
+        da_t_d = os.path.join('seq_monthly_template_{0}'.format(ireal))
+        da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg6_run_seq.pst"))
         par = da_pst.parameter_data
         par.loc[par.parnme.str.contains("welflx"), "scale"] = -1.0
 
@@ -261,7 +257,7 @@ def compare_mf6_freyberg():
         ies_pst.pestpp_options["ies_num_reals"] = 50
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
-        ies_pst.write(os.path.join(ies_t_d, "freyberg6_run_ies.pst"), version=2)
+        ies_pst.write(os.path.join(ies_t_d, "freyberg6_run_bat.pst"), version=2)
 
         # set pestpp options for sequential da
         da_pst.pestpp_options.pop("da_num_reals", None)
@@ -275,20 +271,20 @@ def compare_mf6_freyberg():
         da_pst.pestpp_options["ies_num_reals"] = 50
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
-        da_pst.write(os.path.join(da_t_d, "freyberg6_run_da.pst"), version=2)
+        da_pst.write(os.path.join(da_t_d, "freyberg6_run_seq.pst"), version=2)
 
         # run da          
-        m_da_dir = os.path.join('simple_master2_da_{0}'.format(ireal))
+        m_da_dir = os.path.join('simple_master_seq_{0}'.format(ireal))
 
-        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da.exe', "freyberg6_run_da.pst", port=port,
+        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da.exe', "freyberg6_run_seq.pst", port=port,
                                      num_workers=4, master_dir=m_da_dir, verbose=True)
 
         shutil.rmtree(da_t_d)
 
         # run ies  
-        m_ies_dir = os.path.join('simple_master2_ies_{0}'.format(ireal))
+        m_ies_dir = os.path.join('simple_master_bat_{0}'.format(ireal))
 
-        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies.exe', "freyberg6_run_ies.pst", port=port,
+        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies.exe', "freyberg6_run_bat.pst", port=port,
                                      num_workers=4, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
