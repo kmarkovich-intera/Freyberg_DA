@@ -57,73 +57,52 @@ def clean_master_dirs():
 
         os.chdir('..')
 
-def process_complex_target_output(c_d, s_d, d_d, real):
-    # process for BAT
+def process_complex_target_output(c_d, b_d, s_d, real):
+
+   # process for BAT
     redis_fac = 3
-
-    start_date = pd.to_datetime('20151231', format='%Y%m%d')
-
+    
     # load in obs ensemble
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
     oe_f = oe_f.T
-
-    # process obs
+    
+    #process obs
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    time = hds_f.loc[:, "time"]
-    time = pd.to_timedelta(time.values - 1, unit='D')
-    hds_f.loc[:, "org_time"] = start_date + time.values
-    hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
-    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "trgw_{0}_{1}_{2}_{3}".format(x.k, x.org_i, x.org_j, x.org_time),
-                                             axis=1)
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+1000
+    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
+    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
+    hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    type = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
-    type = pd.DataFrame(type)
-    type = type.replace('gage', 'gage_1')
-    sfr_f.loc[:, "type"] = type.values
-    time = sfr_f.loc[:, "time"]
-    time = pd.to_timedelta(time.values - 1, unit='D')
-    sfr_f.loc[:, "org_time"] = start_date + time.values
-    sfr_f.loc[:, "org_time"] = sfr_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
-    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}_{1}".format(x.type, x.org_time), axis=1)
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]+1000
+    sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[1].split(':')[1]))
+    sfr_f.type.replace('gage', 'gage_1')
+    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
+    sfr_dct = dict(zip(sfr_f.org_obgnme, sfr_f.iloc[:,real]))
+    print(sfr_dct)
 
     pst = pyemu.Pst(os.path.join(s_d, 'freyberg.pst'))
     obs_s = pst.observation_data
+    print(obs_s.obsval)
 
-    for j in range(len(hds_f)):
-        cv = str(hds_f.org_obgnme[j])
-        for i, sv in enumerate(obs_s.obsnme):
-            if sv in cv:
-                obs_s.obsval[i] = hds_f.iloc[j, real]
-                break
+    for i in range(len(obs_s)):
+        if obs_s.obsnme[i].startswith('hds'):
+            obs_s.obsval[i] = hds_dct.get(obs_s.obsnme[i])
+        elif obs_s.obsnme[i].startswith('sfr'):
+            obs_s.obsval[i] = sfr_dct.get(obs_s.obsnme[i])
 
-    for j in range(len(sfr_f)):
-        cv = str(sfr_f.org_obgnme[j])
-        for i, sv in enumerate(obs_s.obsnme):
-            if sv in cv:
-                obs_s.obsval[i] = sfr_f.iloc[j, real]
-                break
 
-    # write pst files to template ies dir (for current real)
-    m_ies_dir = os.path.join('simple_template_ies_{0}'.format(real))
-    if os.path.exists(m_ies_dir):
-        shutil.rmtree(m_ies_dir)
-    shutil.copytree(s_d, m_ies_dir)
-    pst.write(os.path.join(m_ies_dir, "freyberg.pst"), version=2)
+    # #write pst files to template ies dir (for current real)
+    m_ies_dir = os.path.join('bat_monthly_template_{0}'.format(real))
+    shutil.copytree(b_d,m_ies_dir)
+    pst.write(os.path.join(m_ies_dir,"freyberg6_run_bat.pst"),version=2)
 
     # process for SEQ
-    redis_fac = 3
     pst = pyemu.Pst(os.path.join(d_d, "freyberg.pst"))
-
-    start_date = pd.to_datetime('20151231', format='%Y%m%d')
-    dates = pd.date_range(start='2015-12-31', periods=25, freq='M').strftime("%Y%m%d")
 
     # load in obs cycle table
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
@@ -173,7 +152,7 @@ def process_complex_target_output(c_d, s_d, d_d, real):
     m_da_dir = os.path.join('simple_template_da_{0}'.format(real))
     if os.path.exists(m_da_dir):
         shutil.rmtree(m_ies_dir)
-    shutil.copytree(d_d, m_da_dir)
+    shutil.copytree(s_d, m_da_dir)
     pst.write(os.path.join(m_da_dir, "freyberg.pst"), version=2)
     obs_d.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
 
