@@ -96,6 +96,8 @@ def process_complex_target_output(c_d, b_d, s_d, real):
 
     #write pst files to template ies dir (for current real)
     m_ies_dir = os.path.join('bat_monthly_template_{0}'.format(real))
+    if os.path.exists(m_ies_dir):
+        shutil.rmtree(m_ies_dir)
     shutil.copytree(b_d,m_ies_dir)
     pst.write(os.path.join(m_ies_dir,"freyberg6_run_bat.pst"),version=2)
 
@@ -126,7 +128,6 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
     sfr_f.type = sfr_f.type.replace('gage', 'gage_1')
     sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
-    print(sfr_f.org_obgnme)
 
     obs = []
     for nm in enumerate(obs_d.iloc[:,0]):
@@ -142,7 +143,6 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     for nm in enumerate(obs_d.iloc[:,0]):
         if nm[1] == 'gage_1':
             df = sfr_f[sfr_f.org_obgnme.str.contains(nm[1])]
-            print(df)
             sfr_dct = dict(zip(df.time, df.iloc[:, real]))
             df_new = obs_d.loc['time', :]
             df_new = df_new.map(sfr_dct)
@@ -150,13 +150,6 @@ def process_complex_target_output(c_d, b_d, s_d, real):
             obs.append(df_new.T.values)
         else:
             continue
-    for i in range(25):
-        #obs_d.iloc[]
-        obs_d.loc["org_obgnme"] = obs_d.apply(lambda x: "{0}_time:{1}".format(x.index, x.time), axis=0) 
-        for j, (cv, ct) in enumerate(zip(hds_f.org_obgnme, hds_f.org_time)):
-            for k in range(2):
-                if obs_d.iloc[k, 0] in cv and obs_d.iloc[3, i] == ct:
-                    obs_d.iloc[k, i] = hds_f.iloc[j, real]
 
     obs = pd.DataFrame(obs)
     obs.columns = obs_d.columns
@@ -164,7 +157,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     # write pst files and obs cycle table to master da dir (for current real)
     m_da_dir = os.path.join('seq_monthly_template_{0}'.format(real))
     if os.path.exists(m_da_dir):
-        shutil.rmtree(m_ies_dir)
+        shutil.rmtree(m_da_dir)
     shutil.copytree(s_d, m_da_dir)
     pst.write(os.path.join(m_da_dir, "freyberg6_run_seq.pst"), version=2)
     obs.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
@@ -196,8 +189,8 @@ def balance_weights(ireal):
 
     da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'))
 
-    hds_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("trgw")), :].copy()
-    hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: x.split('_')[-1])
+    hds_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
+    hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: x.split('_')[-1])+10000
     hds_f.loc[:, "k"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[1]))
     hds_f.loc[:, "i"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[2]))
     hds_f.loc[:, "j"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[3]))
@@ -840,6 +833,11 @@ def monthly_ies_to_da_old(org_d="monthly_template"):
             odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
             wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
 
+    # #select obs that we actually want to assimilate: near-stream shallow head, gw_1, gw_2, and gage_1
+    # keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
+    # odf = odf.T
+    # odf = odf[odf.iloc[0,:].str.contains(keep)]
+
     odf.T.to_csv(os.path.join(t_d, "obs_cycle_tbl.csv"))
     pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
     wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
@@ -1301,9 +1299,16 @@ def monthly_ies_to_da(org_d):
         else:
             wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
 
-    odf.T.to_csv(os.path.join(t_d, "obs_cycle_tbl.csv"))
+    # select obs that we actually want to assimilate: near-stream shallow head, gw_1, gw_2, and gage_1
+    keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
+    odf = odf.T
+    odf = odf[odf.index.isin(keep)]
+    wdf = wdf.T
+    wdf = wdf[wdf.index.isin(keep)]
+
+    odf.to_csv(os.path.join(t_d, "obs_cycle_tbl.csv"))
     pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
-    wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
+    wdf.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
     pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
 
     # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
@@ -1470,20 +1475,13 @@ def plot_prior_mc():
 if __name__ == "__main__":
 
 
-    # setup_interface("monthly_model_files")
-    # monthly_ies_to_da("monthly_model_files_template")
+    setup_interface("monthly_model_files")
+    monthly_ies_to_da("monthly_model_files_template")
     process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
     #run_batch_seq_prior_monte_carlo()
     # setup_interface("daily_model_files")
     # run_complex_prior_mc('daily_model_files_template')
 #     plot_prior_mc()
-
-    setup_interface("monthly_model_files")
-    monthly_ies_to_da("monthly_model_files_template")
-    run_batch_seq_prior_monte_carlo()
-    setup_interface("daily_model_files")
-    run_complex_prior_mc('daily_model_files_template')
-    plot_prior_mc()
 
     exit()
 
