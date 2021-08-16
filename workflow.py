@@ -150,6 +150,13 @@ def process_complex_target_output(c_d, b_d, s_d, real):
             obs.append(df_new.T.values)
         else:
             continue
+    for i in range(25):
+        #obs_d.iloc[]
+        obs_d.loc["org_obgnme"] = obs_d.apply(lambda x: "{0}_time:{1}".format(x.index, x.time), axis=0) 
+        for j, (cv, ct) in enumerate(zip(hds_f.org_obgnme, hds_f.org_time)):
+            for k in range(2):
+                if obs_d.iloc[k, 0] in cv and obs_d.iloc[3, i] == ct:
+                    obs_d.iloc[k, i] = hds_f.iloc[j, real]
 
     obs = pd.DataFrame(obs)
     obs.columns = obs_d.columns
@@ -1462,6 +1469,7 @@ def plot_prior_mc():
 
 if __name__ == "__main__":
 
+
     # setup_interface("monthly_model_files")
     # monthly_ies_to_da("monthly_model_files_template")
     process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
@@ -1469,6 +1477,14 @@ if __name__ == "__main__":
     # setup_interface("daily_model_files")
     # run_complex_prior_mc('daily_model_files_template')
 #     plot_prior_mc()
+
+    setup_interface("monthly_model_files")
+    monthly_ies_to_da("monthly_model_files_template")
+    run_batch_seq_prior_monte_carlo()
+    setup_interface("daily_model_files")
+    run_complex_prior_mc('daily_model_files_template')
+    plot_prior_mc()
+
     exit()
 
     # invest()
