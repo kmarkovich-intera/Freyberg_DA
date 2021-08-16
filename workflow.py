@@ -1898,13 +1898,13 @@ def plot_prior_mc():
 
             fig,ax = plt.subplots(1,1,figsize=(8,8))
 
-            [ax.plot(cobs.time, c_oe.loc[idx, cobs.obsnme], "b", lw=0.05) for idx in c_oe.index]
+            [ax.plot(cobs.time, c_oe.loc[idx, cobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
 
-            [ax.plot(sbobs.time,s_b_oe.loc[idx,sbobs.obsnme],"0.5",lw=0.05) for idx in s_b_oe.index]
+            [ax.plot(sbobs.time,s_b_oe.loc[idx,sbobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe.index]
             for itime,time in enumerate(sbobs.time):
                 oe = s_s_oe_dict[itime]
                 #print(oe.loc[:,seq_name])
-                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5", lw=0.1)
+                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
 
 
             ax.set_title(ogname)
@@ -1923,9 +1923,9 @@ def plot_prior_mc():
 
 if __name__ == "__main__":
 
-    setup_interface("monthly_model_files")
-    monthly_ies_to_da("monthly_model_files_template")
-    run_batch_seq_prior_monte_carlo()
+    #setup_interface("monthly_model_files")
+    #monthly_ies_to_da("monthly_model_files_template")
+    #run_batch_seq_prior_monte_carlo()
     # setup_interface("daily_model_files")
     # run_complex_prior_mc('daily_model_files_template')
     plot_prior_mc()
