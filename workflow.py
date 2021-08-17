@@ -68,13 +68,14 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     
     #process obs
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    #hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
+    #hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    #hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    #hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
     #hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
     #hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
     #hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
+    #hds_f = obs.loc[obs.obsnme.str.startswith("hds"),:]
     hds_dct = dict(zip(hds_f.index, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
@@ -115,10 +116,10 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     obs_d.iloc[-1,0] = 'time'
 
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    #hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
+    #hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    #hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    #hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
     # hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
     # hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
     # hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "arrobs_head_k:{0}_i:{1}_j:{2}".format(int(x.k), int(x.org_i-1), int(x.org_j-1)), axis=1)
@@ -133,7 +134,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     for nm in enumerate(obs_d.iloc[:,0]):
         if nm[1] == 'gage_1' or nm[1] == 'time':
             continue
-        df = hds_f[hds_f.org_obgnme.str.contains(nm[1])]
+        df = hds_f[hds_f.index.to_series().str.contains(nm[1])]
         hds_dct = dict(zip(df.time, df.iloc[:, real]))
         df_new = obs_d.loc['time',:]
         df_new = df_new.map(hds_dct)
@@ -1525,16 +1526,65 @@ def plot_prior_mc():
             pdf.savefig()
             plt.close(fig)
 
+
+def map_complex_to_simple_bat(c_d,b_d,real_idx):
+    cpst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
+    coe = pd.read_csv(os.path.join(c_d,"freyberg.0.obs.csv"),index_col=0)
+    cvals = coe.loc[real_idx,:]
+
+    bpst = pyemu.Pst(os.path.join(b_d,"freyberg.pst"))
+    obs = bpst.observation_data
+    obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
+    obs.loc[:,"weight"] = 0.0
+    for k in keep:
+        kobs = obs.loc[obs.obsnme.str.contains(k),:].copy()
+        kobs.loc[:,"time"] = kobs.time.apply(float)
+        kobs.sort_values(by="time",inplace=True)
+        obs.loc[kobs.obsnme[:12],"weight"] = 1.0 #generic weight - will be set later
+
+    assert bpst.nnz_obs == 48
+    t_d = b_d + "_{0}".format(real_idx)
+    if os.path.exists(t_d):
+        shutil.rmtree(t_d)
+    shutil.copytree(b_d,t_d)
+    bpst.write(os.path.join(t_d,"freyberg.pst"))
+    return t_d
+
+def map_simple_bat_to_seq(b_d,s_d):
+    bpst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
+    bobs = bpst.observation_data
+    seq_names = set([o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names if "hds_usecol" in o])
+    print(seq_names)
+    spst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
+    snames = set(spst.obs_names)
+    assert len(seq_names - snames) == 0
+    seq_names = list(seq_names)
+    seq_names.sort()
+    sobs = spst.observation_data.loc[seq_names]
+    df = pd.DataFrame(columns = np.arange(25),index=seq_names)
+    for seq_name in seq_names:
+        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name),:].copy()
+        bsobs.loc[:,"time"] = bsobs.time.apply(float)
+        bsobs.sort_values(by="time",inplace=True)
+        df.loc[seq_name,np.arange(12)] = bsobs.obsval.iloc[:12].values
+    assert df.iloc[0,0] == bobs.loc[bpst.nnz_obs_names[0],"obsval"]
+
+
+
+
+
 if __name__ == "__main__":
 
 
     #setup_interface("monthly_model_files")
     #monthly_ies_to_da("monthly_model_files_template")
-    #process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
+    b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
+    map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    #process_complex_target_output('daily_model_files_master_prior','monthly_model_files_template','seq_monthly_model_files_template',1 )
     #run_batch_seq_prior_monte_carlo()
     #setup_interface("daily_model_files")
     #run_complex_prior_mc('daily_model_files_template')
-    plot_prior_mc()
+    #plot_prior_mc()
 
     exit()
 
