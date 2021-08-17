@@ -1477,7 +1477,7 @@ def plot_prior_mc():
 
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     obs = c_pst.observation_data
-    cobs = obs.loc[obs.obsnme.startswith("hds_usecol:arrobs_head_"),:]
+    cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"),:]
     cobs.loc[:,"time"] = cobs.time.apply(float)
 
     s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
@@ -1509,10 +1509,15 @@ def plot_prior_mc():
             [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
 
             [ax.plot(sgobs.time,s_b_oe.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe.index]
+
+            if "hds" in ogname:
+                seq_name = ogname.replace("hds_usecol:","")
+            else:
+                seq_name = ogname + "_time:10000.0"
             for itime,time in enumerate(sgobs.time):
                 oe = s_s_oe_dict[itime]
                 #print(oe.loc[:,seq_name])
-                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, ogname], marker=".",color="0.5",alpha=0.5)
+                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
 
             ax.set_title(ogname)
             if "gage" not in ogname:
@@ -1523,12 +1528,12 @@ def plot_prior_mc():
 if __name__ == "__main__":
 
 
-    setup_interface("monthly_model_files")
-    monthly_ies_to_da("monthly_model_files_template")
+    #setup_interface("monthly_model_files")
+    #monthly_ies_to_da("monthly_model_files_template")
     #process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
-    run_batch_seq_prior_monte_carlo()
-    setup_interface("daily_model_files")
-    run_complex_prior_mc('daily_model_files_template')
+    #run_batch_seq_prior_monte_carlo()
+    #setup_interface("daily_model_files")
+    #run_complex_prior_mc('daily_model_files_template')
     plot_prior_mc()
 
     exit()
