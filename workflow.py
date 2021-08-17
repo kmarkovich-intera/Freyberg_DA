@@ -31,6 +31,7 @@ if "windows" in platform.platform().lower():
 da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
+keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
 
 def clean_master_dirs():
     for i in range(100):
@@ -59,30 +60,29 @@ def clean_master_dirs():
 
 def process_complex_target_output(c_d, b_d, s_d, real):
 
-   # process for BAT
-    redis_fac = 3
-    
     # load in obs ensemble
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
     oe_f = oe_f.T
+    pst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
+    obs = pst.observation_data
     
     #process obs
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+10000
-    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
-    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
-    hds_dct = dict(zip(hds_f.org_obgnme, hds_f.iloc[:,real]))
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    #hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
+    #hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
+    #hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
+    hds_dct = dict(zip(hds_f.index, hds_f.iloc[:,real]))
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]))+10000
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]))
     sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split('_')[1].split(':')[1])
-    sfr_f.type.replace('gage', 'gage_1')
-    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
-    sfr_dct = dict(zip(sfr_f.org_obgnme, sfr_f.iloc[:,real]))
+    #sfr_f.type.replace('gage', 'gage_1')
+    #sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
+    sfr_dct = dict(zip(sfr_f.index, sfr_f.iloc[:,real]))
 
     pst = pyemu.Pst(os.path.join(s_d, 'freyberg.pst'))
     obs_s = pst.observation_data
@@ -99,7 +99,7 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     if os.path.exists(m_ies_dir):
         shutil.rmtree(m_ies_dir)
     shutil.copytree(b_d,m_ies_dir)
-    pst.write(os.path.join(m_ies_dir,"freyberg6_run_bat.pst"),version=2)
+    pst.write(os.path.join(m_ies_dir,"freyberg.pst"),version=2)
 
     # process for SEQ
     sim = flopy.mf6.MFSimulation.load(sim_ws=b_d)
@@ -116,18 +116,18 @@ def process_complex_target_output(c_d, b_d, s_d, real):
 
     hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
     hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))+1
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))+1
-    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+10000
-    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
-    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "arrobs_head_k:{0}_i:{1}_j:{2}".format(int(x.k), int(x.org_i-1), int(x.org_j-1)), axis=1)
+    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
+    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
+    hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    # hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
+    # hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
+    # hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "arrobs_head_k:{0}_i:{1}_j:{2}".format(int(x.k), int(x.org_i-1), int(x.org_j-1)), axis=1)
 
     sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))+10000
-    sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
-    sfr_f.type = sfr_f.type.replace('gage', 'gage_1')
-    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
+    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
+    #sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
+    #sfr_f.type = sfr_f.type.replace('gage', 'gage_1')
+    #sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
 
     obs = []
     for nm in enumerate(obs_d.iloc[:,0]):
@@ -159,14 +159,14 @@ def process_complex_target_output(c_d, b_d, s_d, real):
     if os.path.exists(m_da_dir):
         shutil.rmtree(m_da_dir)
     shutil.copytree(s_d, m_da_dir)
-    pst.write(os.path.join(m_da_dir, "freyberg6_run_seq.pst"), version=2)
+    pst.write(os.path.join(m_da_dir, "freyberg.pst"), version=2)
     obs.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
 
 
 def balance_weights(ireal):
     ies_dir = os.path.join('bat_monthly_template_{0}'.format(ireal))
     da_dir = os.path.join('seq_monthly_template_{0}'.format(ireal))
-    ies_file = 'freyberg6_run_bat.pst'
+    ies_file = 'freyberg.pst'
 
     # run pestpp ies to get phi
     pyemu.os_utils.run("pestpp-ies.exe {0}".format(ies_file), cwd=ies_dir)
@@ -1121,7 +1121,7 @@ def setup_interface(org_ws, num_reals=100):
 
     # set some algorithmic controls
     pst.control_data.noptmax = 0
-    pst.pestpp_options["additional_ins_delimiters"] = ","
+    #pst.pestpp_options["additional_ins_delimiters"] = ","
 
     # ident the obs-par state linkage
     obs = pst.observation_data
@@ -1140,6 +1140,8 @@ def setup_interface(org_ws, num_reals=100):
     #        print(kij,n)
     obs.loc[state_obs.obsnme, "state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.kij), np.nan), axis=1)
     print(obs.state_par_link.dropna().shape)
+
+    keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
 
     # write the control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"))
@@ -1230,13 +1232,18 @@ def monthly_ies_to_da(org_d):
     fname = 'sfr.csv'
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+    ins_lines = open(os.path.join(t_d, fname_ins), 'r').readlines()
     with open(os.path.join(t_d, fname_ins), 'w') as f:
-        f.write("pif ~\n")
-        f.write("l1 \n")
-        f.write("l1")
-        for i in range(sfr.shape[1]):
-            oname = "{0}".format(nms[i])
-            f.write(" ~,~ !{0}! ".format(oname))
+        for line in ins_lines[:3]:
+            f.write(line)
+
+    # with open(os.path.join(t_d, fname_ins), 'w') as f:
+    #     f.write("pif ~\n")
+    #     f.write("l1 \n")
+    #     f.write("l1")
+    #     for i in range(sfr.shape[1]):
+    #         oname = "{0}".format(nms[i])
+    #         f.write(" ~,~ !{0}! ".format(oname))
     new_ins_files = [os.path.join(t_d, fname_ins)]
     new_out = [os.path.join(t_d, "sfr.csv")]
     new_ins_cycle = [-1]
@@ -1246,17 +1253,14 @@ def monthly_ies_to_da(org_d):
         pst.add_observations(ins_file, pst_path=".")
 
     pst.observation_data.loc[:, 'cycle'] = -1
-    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:trgw"), :].copy()
-    tr_obs.loc[tr_obs.obsnme, "time"] = tr_obs.obsnme.apply(lambda x: x.split(':')[-1])
-    tr_obs.loc[tr_obs.obsnme, "k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
-    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
-    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[4]))
+    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:arrobs_head"), :].copy()
+    tr_obs.loc[tr_obs.obsnme, "time"] = tr_obs.time.apply(float)
+    tr_obs.loc[tr_obs.obsnme, "k"] = tr_obs.k.apply(int)
+    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.i.apply(int)
+    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.j.apply(int)
     tr_obs.loc[tr_obs.obsnme, "obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
 
     head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("arrobs_head_"), :].copy()
-    # head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
-    # head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
-    # head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
     for v in ["k", "i", "j"]:
         head_obs.loc[:, v] = head_obs.loc[:, v].apply(int)
 
@@ -1264,7 +1268,7 @@ def monthly_ies_to_da(org_d):
     odf_names = []
     pst.observation_data.loc[:, "org_obgnme"] = np.NaN
     pst.observation_data.loc[:, "weight"] = 0.0
-    pst.observation_data.loc["gage_1", "weight"] = 1.0
+    pst.observation_data.loc["sfr_usecol:gage_1_time:10000.0", "weight"] = 1.0
 
     for og in tr_obs.obgnme.unique():
         site_obs = tr_obs.loc[tr_obs.obgnme == og, :]
@@ -1277,7 +1281,7 @@ def monthly_ies_to_da(org_d):
         pst.observation_data.loc[head_name, "weight"] = site_obs.weight.max()
         pst.observation_data.loc[head_name, "org_obgnme"] = og
         odf_names.append(head_name)
-    odf_names.append("gage_1")
+    odf_names.append("sfr_usecol:gage_1_time:10000.0")
 
     odf = pd.DataFrame(columns=odf_names, index=np.arange(25))
     wdf = pd.DataFrame(columns=odf_names, index=np.arange(25))
@@ -1293,14 +1297,14 @@ def monthly_ies_to_da(org_d):
     # pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
     g_obs.sort_index(inplace=True)
     for i, name in enumerate(g_obs.obsnme):
-        odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
+        odf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = g_obs.loc[name, "obsval"]
         if i > 12:
-            wdf.loc[i, "gage_1"] = 0
+            wdf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = 0
         else:
-            wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
+            wdf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = g_obs.loc[name, "weight"]
 
     # select obs that we actually want to assimilate: near-stream shallow head, gw_1, gw_2, and gage_1
-    keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
+
     odf = odf.T
     odf = odf[odf.index.isin(keep)]
     wdf = wdf.T
@@ -1388,7 +1392,7 @@ def run_batch_seq_prior_monte_carlo():
                                  master_dir=t_d.replace("template", "master_prior"))
 
 
-def plot_prior_mc():
+def plot_prior_mc_old():
     c_m_d = "daily_model_files_master_prior"
     s_b_m_d = "monthly_model_files_master_prior"
     s_s_m_d = "seq_monthly_model_files_master_prior"
@@ -1466,18 +1470,62 @@ def plot_prior_mc():
 
 
 
+def plot_prior_mc():
+    c_m_d = "daily_model_files_master_prior"
+    s_b_m_d = "monthly_model_files_master_prior"
+    s_s_m_d = "seq_monthly_model_files_master_prior"
+
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    obs = c_pst.observation_data
+    cobs = obs.loc[obs.obsnme.startswith("hds_usecol:arrobs_head_"),:]
+    cobs.loc[:,"time"] = cobs.time.apply(float)
+
+    s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    s_b_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+
+    s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
+    seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
+    s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
+    #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
+
+    ognames = list(cobs.obgnme.unique())
+    ognames.sort()
+    ognames.append("sfr_usecol:gage_1")
+    with PdfPages("prior_obs_v_sim.pdf") as pdf:
+
+        for ogname in ognames:
+            cgobs = cobs.loc[cobs.obgnme==ogname,:].copy()
+            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obgnme==ogname,:].copy()
+            sgobs.loc[:,"time"] = sgobs.time.apply(float)
+            cgobs.loc[:, "time"] = cgobs.time.apply(float)
+
+            sgobs.sort_values(by="time", inplace=True)
+            cgobs.sort_values(by="time",inplace=True)
 
 
+            fig,ax = plt.subplots(1,1,figsize=(8,8))
 
+            [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
 
+            [ax.plot(sgobs.time,s_b_oe.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe.index]
+            for itime,time in enumerate(sgobs.time):
+                oe = s_s_oe_dict[itime]
+                #print(oe.loc[:,seq_name])
+                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, ogname], marker=".",color="0.5",alpha=0.5)
 
+            ax.set_title(ogname)
+            if "gage" not in ogname:
+                ax.set_ylim(30,ax.get_ylim()[1])
+            pdf.savefig()
+            plt.close(fig)
 
 if __name__ == "__main__":
 
 
     setup_interface("monthly_model_files")
     monthly_ies_to_da("monthly_model_files_template")
-    process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
+    #process_complex_target_output('complex_master','monthly_model_files_template','seq_monthly_model_files_template',1 )
     run_batch_seq_prior_monte_carlo()
     setup_interface("daily_model_files")
     run_complex_prior_mc('daily_model_files_template')
