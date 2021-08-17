@@ -58,201 +58,34 @@ def clean_master_dirs():
 
         os.chdir('..')
 
-def process_complex_target_output(c_d, b_d, s_d, real):
 
-    # load in obs ensemble
-    oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
-    oe_f = oe_f.T
-    pst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
-    obs = pst.observation_data
-    
-    #process obs
-    hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    #hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    #hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    #hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    #hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    #hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
-    #hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
-    #hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "hds_usecol:trgw_{0}_{1}_{2}_time:{3}".format(int(x.k), int(x.org_i-1), int(x.org_j-1), x.time), axis=1)
-    #hds_f = obs.loc[obs.obsnme.str.startswith("hds"),:]
-    hds_dct = dict(zip(hds_f.index, hds_f.iloc[:,real]))
-
-    sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split(':')[-1]))
-    sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split('_')[1].split(':')[1])
-    #sfr_f.type.replace('gage', 'gage_1')
-    #sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "sfr_usecol:{0}_time:{1}".format(x.type, x.time), axis=1)
-    sfr_dct = dict(zip(sfr_f.index, sfr_f.iloc[:,real]))
-
-    pst = pyemu.Pst(os.path.join(s_d, 'freyberg.pst'))
-    obs_s = pst.observation_data
-
-    for i in range(len(obs_s)):
-        if obs_s.obsnme[i].startswith('hds'):
-            obs_s.obsval[i] = hds_dct.get(obs_s.obsnme[i])
-        elif obs_s.obsnme[i].startswith('sfr'):
-            obs_s.obsval[i] = sfr_dct.get(obs_s.obsnme[i])
-
-
-    #write pst files to template ies dir (for current real)
-    m_ies_dir = os.path.join('bat_monthly_template_{0}'.format(real))
-    if os.path.exists(m_ies_dir):
-        shutil.rmtree(m_ies_dir)
-    shutil.copytree(b_d,m_ies_dir)
-    pst.write(os.path.join(m_ies_dir,"freyberg.pst"),version=2)
-
-    # process for SEQ
-    sim = flopy.mf6.MFSimulation.load(sim_ws=b_d)
-    perlen = np.cumsum(sim.tdis.perioddata.array["perlen"])+1
-    
-    pst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
-
-    # load in obs data and obs cycle table
-    oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
-    oe_f = oe_f.T
-    obs_d = pd.read_csv(os.path.join(s_d, 'obs_cycle_tbl.csv'))
-    obs_d.loc["time", 1:] = perlen
-    obs_d.iloc[-1,0] = 'time'
-
-    hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    #hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    #hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    #hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    #hds_f.loc[:, "time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    # hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac)
-    # hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac)
-    # hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "arrobs_head_k:{0}_i:{1}_j:{2}".format(int(x.k), int(x.org_i-1), int(x.org_j-1)), axis=1)
-
-    sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    #sfr_f.loc[:, "type"] = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
-    #sfr_f.type = sfr_f.type.replace('gage', 'gage_1')
-    #sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
-
-    obs = []
-    for nm in enumerate(obs_d.iloc[:,0]):
-        if nm[1] == 'gage_1' or nm[1] == 'time':
-            continue
-        df = hds_f[hds_f.index.to_series().str.contains(nm[1])]
-        hds_dct = dict(zip(df.time, df.iloc[:, real]))
-        df_new = obs_d.loc['time',:]
-        df_new = df_new.map(hds_dct)
-        df_new.iloc[0] = nm[1]
-        obs.append(df_new.T.values)
-
-    for nm in enumerate(obs_d.iloc[:,0]):
-        if nm[1] == 'gage_1':
-            df = sfr_f[sfr_f.org_obgnme.str.contains(nm[1])]
-            sfr_dct = dict(zip(df.time, df.iloc[:, real]))
-            df_new = obs_d.loc['time', :]
-            df_new = df_new.map(sfr_dct)
-            df_new.iloc[0] = nm[1]
-            obs.append(df_new.T.values)
-        else:
-            continue
-
-    obs = pd.DataFrame(obs)
-    obs.columns = obs_d.columns
-
-    # write pst files and obs cycle table to master da dir (for current real)
-    m_da_dir = os.path.join('seq_monthly_template_{0}'.format(real))
-    if os.path.exists(m_da_dir):
-        shutil.rmtree(m_da_dir)
-    shutil.copytree(s_d, m_da_dir)
-    pst.write(os.path.join(m_da_dir, "freyberg.pst"), version=2)
-    obs.to_csv(os.path.join(m_da_dir, 'obs_cycle_tbl.csv'), index=False)
-
-
-def balance_weights(ireal):
-    ies_dir = os.path.join('bat_monthly_template_{0}'.format(ireal))
-    da_dir = os.path.join('seq_monthly_template_{0}'.format(ireal))
-    ies_file = 'freyberg.pst'
-
-    # run pestpp ies to get phi
-    pyemu.os_utils.run("pestpp-ies.exe {0}".format(ies_file), cwd=ies_dir)
-
-    pst = pyemu.Pst(os.path.join(ies_dir, ies_file))
-    obs = pst.observation_data
-
-    # balance weights based on phi components
-    pst.res.loc[:, 'residual'] = pst.res.loc[:, 'residual'] * pst.res.loc[:, 'weight']
-    phi_comps = pst.res.groupby(["group"]).sum()
-    phi_comp = phi_comps.loc[:, 'residual']
-    phi_grps = phi_comps.index
-    obs_phi_dict = dict(zip(phi_grps, phi_comp))
-    pst._adjust_weights_by_phi_components(obs_phi_dict, original_ceiling=False)
-    pst.write(os.path.join(ies_dir, ies_file), version=2)
-
-    # modify da weight cycle table based on new weights
-#     start_date = pd.to_datetime('20151231', format='%Y%m%d')
-#     dates = pd.date_range(start='2015-12-31', periods=25, freq='M').strftime("%Y%m%d")
-
-    da_wt = pd.read_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'))
-
-    hds_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    hds_f.loc[:, "time"] = hds_f.obsnme.apply(lambda x: x.split('_')[-1])+10000
-    hds_f.loc[:, "k"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[1]))
-    hds_f.loc[:, "i"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "j"] = hds_f.obsnme.apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "head_{:02d}_{:03d}_{:03d}".format(x.k, x.i, x.j),
-                                             axis=1)
-    sfr_f = obs.loc[obs.index.to_series().apply(lambda x: x.startswith("gage_1")), :].copy()
-    sfr_f.loc[:, "time"] = sfr_f.obsnme.apply(lambda x: x.split('_')[-1])
-    dates = pd.DataFrame(dates)
-    dates.loc[:, 'cycle'] = range(25)
-    cycle_dict = dict(zip(dates.iloc[:, 0], dates.loc[:, 'cycle']))
-    hds_f.loc[:, 'time'] = hds_f.loc[:, 'time'].replace(cycle_dict, regex=True)
-    sfr_f.loc[:, 'time'] = sfr_f.loc[:, 'time'].replace(cycle_dict, regex=True)
-
-    for i in range(3):
-        for j in range(24):
-            for k in range(650):
-                m = j + 2
-                if da_wt.iloc[i, 0] in hds_f.iloc[k, 9] and hds_f.iloc[k, 5] == m:
-                    da_wt.iloc[i, m] = hds_f.iloc[k, 2]
-
-    for j in range(24):
-        for k in range(25):
-            m = j + 2
-            if sfr_f.iloc[k, 5] == m:
-                da_wt.iloc[2, m] = sfr_f.iloc[k, 2]
-
-    da_wt.to_csv(os.path.join(da_dir, 'weight_cycle_tbl.csv'), index=False)
-
-
-def compare_mf6_freyberg():
+def compare_mf6_freyberg(num_workers=10):
     for ireal in range(100):
-        complex_dir = os.path.join('complex_master')
+        complex_dir = os.path.join('daily_model_files_master_prior')
         bat_dir = os.path.join('monthly_model_files_template')
         seq_dir = os.path.join('seq_monthly_model_files_template')
 
-        process_complex_target_output(complex_dir, bat_dir, seq_dir, ireal)
+        ies_t_d = map_complex_to_simple_bat(complex_dir,bat_dir,ireal)
+        da_t_d = map_simple_bat_to_seq(ies_t_d,seq_dir)
 
-        balance_weights(ireal)
-        return
         # run batch and sequential simple models
         # ies stuff
-        ies_t_d = os.path.join('bat_monthly_template_{0}'.format(ireal))
-        ies_pst = pyemu.Pst(os.path.join(ies_t_d, "freyberg6_run_bat.pst"))
+        ies_pst = pyemu.Pst(os.path.join(ies_t_d, "freyberg.pst"))
 
         # prep that prior ensemble for da
-        da_t_d = os.path.join('seq_monthly_template_{0}'.format(ireal))
-        da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg6_run_seq.pst"))
-        par = da_pst.parameter_data
-        par.loc[par.parnme.str.contains("welflx"), "scale"] = -1.0
+        da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg.pst"))
 
         ies_pst.pestpp_options["ies_par_en"] = "prior.jcb"
-        ies_pe = pyemu.ParameterEnsemble.from_binary(pst=ies_pst, filename=os.path.join(ies_t_d, "prior.jcb"))
-        da_pe = pyemu.ParameterEnsemble.from_gaussian_draw(pst=da_pst,
-                                                           cov=pyemu.Cov.from_parameter_data(da_pst),
-                                                           num_reals=ies_pe.shape[0])
-        da_pe.index = ies_pe.index
-        d = set(da_pe.columns.tolist()).symmetric_difference(set(ies_pe.columns.tolist()))
-        print(d)
-        da_pe.loc[:, ies_pe.columns] = ies_pe.values
-        da_pe.to_binary(os.path.join(da_t_d, "da_prior.jcb"))
-        da_pst.pestpp_options["ies_par_en"] = "da_prior.jcb"
+        # ies_pe = pyemu.ParameterEnsemble.from_binary(pst=ies_pst, filename=os.path.join(ies_t_d, "prior.jcb"))
+        # da_pe = pyemu.ParameterEnsemble.from_gaussian_draw(pst=da_pst,
+        #                                                    cov=pyemu.Cov.from_parameter_data(da_pst),
+        #                                                    num_reals=ies_pe.shape[0])
+        # da_pe.index = ies_pe.index
+        # d = set(da_pe.columns.tolist()).symmetric_difference(set(ies_pe.columns.tolist()))
+        # print(d)
+        # da_pe.loc[:, ies_pe.columns] = ies_pe.values
+        # da_pe.to_binary(os.path.join(da_t_d, "da_prior.jcb"))
+        # da_pst.pestpp_options["ies_par_en"] = "da_prior.jcb"
 
         # set pestpp options for batch da
         ies_pst.pestpp_options.pop("ies_num_reals", None)
@@ -263,10 +96,10 @@ def compare_mf6_freyberg():
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
         ies_pst.pestpp_options["ies_drop_conflicts"] = False
-        ies_pst.pestpp_options["ies_num_reals"] = 50
+        ies_pst.pestpp_options["ies_num_reals"] = 100
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
-        ies_pst.write(os.path.join(ies_t_d, "freyberg6_run_bat.pst"), version=2)
+        ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
 
         # set pestpp options for sequential da
         da_pst.pestpp_options.pop("da_num_reals", None)
@@ -277,26 +110,27 @@ def compare_mf6_freyberg():
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
         da_pst.pestpp_options["ies_drop_conflicts"] = False
-        da_pst.pestpp_options["ies_num_reals"] = 50
+        da_pst.pestpp_options["ies_num_reals"] = 100
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
-        da_pst.write(os.path.join(da_t_d, "freyberg6_run_seq.pst"), version=2)
+        da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
         # run da          
-        m_da_dir = os.path.join('simple_master_seq_{0}'.format(ireal))
+        m_da_dir = da_t_d.replace("template","master")
 
-        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da.exe', "freyberg6_run_seq.pst", port=port,
-                                     num_workers=4, master_dir=m_da_dir, verbose=True)
+        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
+                                     num_workers=num_workers, master_dir=m_da_dir, verbose=True)
 
         shutil.rmtree(da_t_d)
 
         # run ies  
-        m_ies_dir = os.path.join('simple_master_bat_{0}'.format(ireal))
+        m_ies_dir = ies_t_d.replace("template","master")
 
-        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies.exe', "freyberg6_run_bat.pst", port=port,
+        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
                                      num_workers=4, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
+        break
 
 
 def run_complex_prior_mc(c_t):
@@ -632,291 +466,6 @@ def invest():
     plt.show()
 
 
-def monthly_ies_to_da_old(org_d="monthly_template"):
-    org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
-    org_totim = np.cumsum(org_sim.tdis.perioddata.array["perlen"])
-
-    t_d = "seq_" + org_d
-    if os.path.exists(t_d):
-        shutil.rmtree(t_d)
-    shutil.copytree(org_d, t_d)
-
-    mm_df = pd.read_csv(os.path.join(t_d, "mult2model_info.csv"))
-    print(mm_df.shape)
-    drop_rch = mm_df.loc[mm_df.model_file.apply(lambda x: "rch_" in x and not "_1." in x), :].index
-    mm_df = mm_df.drop(drop_rch)
-    print(mm_df.shape)
-    drop_wel = mm_df.loc[mm_df.model_file.apply(lambda x: ".wel_" in x and not "_1." in x), :].index
-    mm_df = mm_df.drop(drop_wel)
-    print(mm_df.shape)
-
-    mm_df.to_csv(os.path.join(t_d, "mult2model_info.csv"))
-
-    # first modify the tdis
-    with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
-        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
-        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
-        f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
-    # make sure it runs
-    pyemu.os_utils.run("mf6", cwd=t_d)
-
-    # write a tdis template file - could possibly keep all 25 stress periods to
-    # simulate a 2-year-ahead forecast...
-    with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
-        f.write("ptf  ~\n")
-        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
-        f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
-        f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
-    new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
-    new_tpl_cycle = [-1]
-
-    pyemu.os_utils.run("mf6", cwd=t_d)
-
-    pst = pyemu.Pst(os.path.join(t_d, "freyberg.pst"))
-    for tpl, inf, cy in zip(new_tpl, new_in, new_tpl_cycle):
-        df = pst.add_parameters(tpl, inf, pst_path=".")
-        pst.parameter_data.loc[df.parnme, "cycle"] = cy
-        pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
-
-    # write par cycle table
-    pers = org_sim.tdis.perioddata.array["perlen"]
-    # pers[0] = 1000
-    pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
-    pdf.loc['perlen', :] = pers
-    pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
-    pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
-
-    # add initial condition parameters (all cells)
-    ic_files = [f for f in os.listdir(t_d) if "ic_strt" in f.lower() and f.lower().endswith(".txt")]
-    print(ic_files)
-
-    for ic_file in ic_files:
-        k = int(ic_file.split(".")[1][-1]) - 1
-        # ib = org_sim.get_model("freyberg6").dis.idomain[k].array
-        ib = np.loadtxt(os.path.join(t_d, 'freyberg6.dis_idomain_layer{0}.txt'.format(k + 1)))
-        arr = np.loadtxt(os.path.join(t_d, ic_file))
-        tpl_file = os.path.join(t_d, ic_file + ".tpl")
-        ic_val_dict = {}
-        with open(tpl_file, 'w') as f:
-            f.write("ptf ~\n")
-            for i in range(arr.shape[0]):
-                for j in range(arr.shape[1]):
-                    if ib[i, j] > 0 and arr[i, j] > 0:
-                        pname = "head_k:{0}_i:{1}_j:{2}".format(k, i, j)
-                        f.write(" ~ {0} ~ ".format(pname))
-                        ic_val_dict[pname] = arr[i, j]
-                    else:
-                        f.write(" -9999999 ".format(pname))
-                f.write("\n")
-        df = pst.add_parameters(tpl_file, pst_path=".")
-        for pname, parval1 in ic_val_dict.items():
-            pst.parameter_data.loc[pname, "parval1"] = parval1
-            pst.parameter_data.loc[pname, "partrans"] = "none"
-            pst.parameter_data.loc[pname, "parchglim"] = "relative"
-
-            pst.parameter_data.loc[pname, "parlbnd"] = -1000000
-            pst.parameter_data.loc[pname, "parubnd"] = 10000000
-
-    # and add final simulated water level observations (all cells - will need a new post processor)
-    # and link these two via the observation data state_par_link attr.
-    frun = os.path.join(t_d, "forward_run.py")
-    frun_lines = open(frun).readlines()
-    frun_lines.append("import flopy\n")
-    frun_lines.append("hds = flopy.utils.HeadFile('freyberg6_freyberg.hds')\n")
-    frun_lines.append("arr = hds.get_data()\n")
-    frun_lines.append("for k,a in enumerate(arr):\n")
-    frun_lines.append("    np.savetxt('sim_head_{0}.dat'.format(k),a,fmt='%15.6E')\n")
-    with open(frun, 'w') as f:
-        for line in frun_lines:
-            f.write(line)
-    hds = flopy.utils.HeadFile(os.path.join(t_d, "freyberg6_freyberg.hds"))
-    arr = hds.get_data()
-    new_ins_files = []
-    new_out = []
-    new_ins_cycle = []
-
-    for k in range(arr.shape[0]):
-        out_file = os.path.join(t_d, "sim_head_{0}.dat".format(k))
-        np.savetxt(out_file, arr[k, :, :], fmt="%15.6E")
-        with open(out_file + ".ins", 'w') as f:
-            f.write("pif ~\n")
-            for i in range(arr.shape[1]):
-                f.write("l1 ")
-                for j in range(arr.shape[2]):
-                    oname = "head_k:{0}_i:{1}_j:{2}".format(k, i, j)
-                    f.write(" !{0}! ".format(oname))
-                f.write("\n")
-        # just to check that the ins file is valid...
-        new_ins_files.append(out_file + ".ins")
-        i = pyemu.pst_utils.InstructionFile(out_file + ".ins")
-        df = i.read_output_file(out_file)
-
-    # save this for later!
-    org_obs = pst.observation_data.copy()
-
-    # now drop all existing heads obs since those will be replaced by the state obs
-    fname = 'heads.csv'
-    fname_ins = fname + ".ins"
-    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
-
-    sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
-    sfr = sfr.drop(['time'], axis=1)
-    nms = sfr.columns.to_series()
-    fname = 'sfr.csv'
-    fname_ins = fname + ".ins"
-    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
-    with open(os.path.join(t_d, fname_ins), 'w') as f:
-        f.write("pif ~\n")
-        f.write("l1 \n")
-        f.write("l1")
-        for i in range(sfr.shape[1]):
-            oname = "{0}".format(nms[i])
-            f.write(" ~,~ !{0}! ".format(oname))
-    new_ins_files.append(os.path.join(t_d, fname_ins))
-    new_out.append(os.path.join(t_d, "sfr.csv"))
-    new_ins_cycle.append(-1)
-
-    # add sfr obs
-    for ins_file in new_ins_files:
-        pst.add_observations(ins_file, pst_path=".")
-
-    pst.observation_data.loc[:, 'cycle'] = -1
-    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:trgw"), :].copy()
-    tr_obs.loc[tr_obs.obsnme, "time"] = tr_obs.obsnme.apply(lambda x: x.split(':')[-1])
-    tr_obs.loc[tr_obs.obsnme, "k"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[2]))
-    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[3]))
-    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.obsnme.apply(lambda x: np.int(x.split('_')[4]))
-    tr_obs.loc[tr_obs.obsnme, "obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
-
-    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("head_"), :].copy()
-    head_obs.loc[head_obs.obsnme, "k"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[1].split(':')[1]))
-    head_obs.loc[head_obs.obsnme, "i"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[2].split(':')[1]))
-    head_obs.loc[head_obs.obsnme, "j"] = head_obs.obsnme.apply(lambda x: np.int(x.split('_')[3].split(':')[1]))
-
-    obs_heads = {}
-    odf_names = []
-    pst.observation_data.loc[:, "org_obgnme"] = np.NaN
-    pst.observation_data.loc[:, "weight"] = 0.0
-    pst.observation_data.loc["gage_1", "weight"] = 1.0
-
-    for og in tr_obs.obgnme.unique():
-        site_obs = tr_obs.loc[tr_obs.obgnme == og, :]
-        site_obs.sort_values(by="time", inplace=True)
-        head_name = "head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0], site_obs.i[0], site_obs.j[0])
-        for i, oname in enumerate(site_obs.obsnme):
-            obs_heads[oname] = (head_name, i)
-        # assign max weight in the control file since some have zero weight and
-        # we are covering weights in the weight table
-        pst.observation_data.loc[head_name, "weight"] = site_obs.weight.max()
-        pst.observation_data.loc[head_name, "org_obgnme"] = og
-        odf_names.append(head_name)
-    odf_names.append("gage_1")
-
-    odf = pd.DataFrame(columns=odf_names, index=np.arange(25))
-    wdf = pd.DataFrame(columns=odf_names, index=np.arange(25))
-    for tr_name, (head_name, icycle) in obs_heads.items():
-        if icycle > 12:
-            odf.loc[icycle, head_name] = org_obs.loc[tr_name, "obsval"]
-            wdf.loc[icycle, head_name] = 0
-        else:
-            odf.loc[icycle, head_name] = org_obs.loc[tr_name, "obsval"]
-            wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
-
-    g_obs = org_obs.loc[org_obs.obsnme.str.startswith("sfr_usecol:gage_1"), :].copy()
-    # give these obs the max weight since some have zero weight
-    # pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
-    g_obs.sort_index(inplace=True)
-    for i, name in enumerate(g_obs.obsnme):
-        if i > 12:
-            odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
-            wdf.loc[i, "gage_1"] = 0
-        else:
-            odf.loc[i, "gage_1"] = g_obs.loc[name, "obsval"]
-            wdf.loc[i, "gage_1"] = g_obs.loc[name, "weight"]
-
-    # #select obs that we actually want to assimilate: near-stream shallow head, gw_1, gw_2, and gage_1
-    # keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
-    # odf = odf.T
-    # odf = odf[odf.iloc[0,:].str.contains(keep)]
-
-    odf.T.to_csv(os.path.join(t_d, "obs_cycle_tbl.csv"))
-    pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
-    wdf.T.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
-    pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
-
-    # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
-    pst.model_input_data.loc[:, "cycle"] = -1
-    for i in range(len(pst.model_input_data)):
-        if pst.model_input_data.iloc[i, 0].startswith('wel_grid'):
-            cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy - 1
-            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
-        if pst.model_input_data.iloc[i, 0].startswith('twel_mlt'):
-            cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy - 1
-            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
-        elif 'rch_recharge' in pst.model_input_data.iloc[i, 0] and "cn" in pst.model_input_data.iloc[i, 0]:
-            cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
-            pst.model_input_data.iloc[i, 2] = cy - 1
-            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
-
-    pst.model_output_data.loc[:, "cycle"] = -1
-
-    # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
-    # should get a cycle value of -1.
-    pst.parameter_data.loc[:, "cycle"] = -1
-
-    for i in range(len(pst.parameter_data)):
-        if pst.parameter_data.iloc[i, 0].startswith('wel_grid'):
-            cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy - 1
-        elif pst.parameter_data.iloc[i, 0].startswith('twel_mlt'):
-            cy = int(pst.parameter_data.iloc[i, 0].split('_')[2])
-            pst.parameter_data.iloc[i, 22] = cy - 1
-        elif 'rch_recharge' in pst.parameter_data.iloc[i, 0] and "cn" in pst.parameter_data.iloc[i, 0]:
-            cy = int(pst.parameter_data.iloc[i, 0].split('_')[4])
-            pst.parameter_data.iloc[i, 22] = cy - 1
-
-    # pst.observation_data.loc[:, "state_par_link"] = ''
-    # print(pst.observation_data.iloc[2429,:])
-    # for i in range(len(pst.observation_data)):
-    #    if pst.observation_data.iloc[i, 0].startswith('head_'):
-    #        pst.observation_data.iloc[i,9] = pst.observation_data.iloc[i,0]
-
-    pst.control_data.noptmax = 3
-    # # pst.pestpp_options["ies_num_reals"] = 3
-    pst.pestpp_options["da_num_reals"] = 50
-    # # if not sync_state_names:
-    # #     pst.observation_data.loc[:,"state_par_link"] = np.NaN
-    # #     obs = pst.observation_data
-    # #     obs.loc[:,"state_par_link"] = obs.obsnme.apply(lambda x: obs_to_par_map.get(x,np.NaN))
-    print(pst.nnz_obs_names)
-    pst.write(os.path.join(t_d, "freyberg6_run_da.pst"), version=2)
-    # return pst
-
-    pe = pyemu.ParameterEnsemble.from_binary(pst=pst, filename=os.path.join(t_d, "prior.jcb"))
-    pepars = set(pe.columns.tolist())
-    pstpars = set(pst.par_names)
-    par = pst.parameter_data
-    d = pepars.symmetric_difference(pstpars)
-    missing = par.loc[par.parnme.apply(lambda x: x in d), "parnme"]
-    mvals = par.parval1.loc[missing]
-    pe.loc[:, missing] = np.NaN
-    for idx in pe.index:
-        pe.loc[idx, missing] = mvals
-
-    pe.to_binary(os.path.join(t_d, "prior.jcb"))
-
-    pst.pestpp_options["da_num_reals"] = 100
-    pst.control_data.noptmax = 3
-    pst.write(os.path.join(t_d, "test.pst"), version=2)
-    # pyemu.os_utils.run("pestpp-da test.pst",cwd=t_d)
-    return
-    pst.pestpp_options["da_num_reals"] = 100
-    pst.write(os.path.join(t_d, "test.pst"), version=2)
-    pyemu.os_utils.start_workers(t_d, "pestpp-da", "test.pst", num_workers=10, master_dir=t_d + "prior_test")
-
-
 def test_extract_state_obs(t_d):
     cwd = os.getcwd()
     os.chdir(t_d)
@@ -1041,10 +590,6 @@ def setup_interface(org_ws, num_reals=100):
                 uub = arr.mean() * ub
                 llb = arr.mean() * lb
                 kper = int(arr_file.split('.')[1].split('_')[-1]) - 1
-                #pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
-                #                  pargp="rch_const", zone_array=ib, upper_bound=ub, lower_bound=lb,
-                #                  geostruct=temporal_gs,
-                #                  datetime=dts[kper])
                 pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
                                   pargp="rch_const", zone_array=ib, upper_bound=uub, lower_bound=llb,
                                   geostruct=temporal_gs,
@@ -1145,7 +690,7 @@ def setup_interface(org_ws, num_reals=100):
     keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
 
     # write the control file
-    pst.write(os.path.join(pf.new_d, "freyberg.pst"))
+    pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
 
     # run with noptmax = 0
     pyemu.os_utils.run("{0} freyberg.pst".format(
@@ -1163,26 +708,29 @@ def setup_interface(org_ws, num_reals=100):
     pst.pestpp_options["ies_par_en"] = "prior.jcb"
 
     # write the updated pest control file
-    pst.write(os.path.join(pf.new_d, "freyberg.pst"))
+    pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
 
 
 def monthly_ies_to_da(org_d):
-    org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
-    org_totim = np.cumsum(org_sim.tdis.perioddata.array["perlen"])
+    """convert the batch monthly model to sequential formulation"""
 
+    # load the existing 25-stress period model
+    org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
+
+    # setup the destination dir
     t_d = "seq_" + org_d
     if os.path.exists(t_d):
         shutil.rmtree(t_d)
     shutil.copytree(org_d, t_d)
 
+    #first modify the multiplication key file
     mm_df = pd.read_csv(os.path.join(t_d, "mult2model_info.csv"))
-    print(mm_df.shape)
+    # remove all but the first stress period for time-varying recharge pars
     drop_rch = mm_df.loc[mm_df.model_file.apply(lambda x: "rch_" in x and not "_1." in x), :].index
     mm_df = mm_df.drop(drop_rch)
-    print(mm_df.shape)
+    # remove all but the first stress period for time-varying well pars
     drop_wel = mm_df.loc[mm_df.model_file.apply(lambda x: ".wel_" in x and not "_1." in x), :].index
     mm_df = mm_df.drop(drop_wel)
-    print(mm_df.shape)
     mm_df.to_csv(os.path.join(t_d, "mult2model_info.csv"))
 
     # modify the tdis
@@ -1202,17 +750,20 @@ def monthly_ies_to_da(org_d):
     new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
     new_tpl_cycle = [-1]
 
+    # make sure it runs...
     pyemu.os_utils.run("mf6", cwd=t_d)
 
+    # load the existing control file
     pst = pyemu.Pst(os.path.join(t_d, "freyberg.pst"))
+
+    # add the new tdis template file
     for tpl, inf, cy in zip(new_tpl, new_in, new_tpl_cycle):
         df = pst.add_parameters(tpl, inf, pst_path=".")
         pst.parameter_data.loc[df.parnme, "cycle"] = cy
         pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
 
-    # write par cycle table
+    # write par cycle table for the perlen par (fixed)
     pers = org_sim.tdis.perioddata.array["perlen"]
-    # pers[0] = 1000
     pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
     pdf.loc['perlen', :] = pers
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
@@ -1221,30 +772,22 @@ def monthly_ies_to_da(org_d):
     # save this for later!
     org_obs = pst.observation_data.copy()
 
-    # now drop all existing heads obs since those will be replaced by the state obs
+    # now drop all existing heads obs package observations since
+    # those will be replaced by the state obs
     fname = 'heads.csv'
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
-    # fix the sfr obs
-    sfr = pd.read_csv(os.path.join(t_d, 'sfr.csv'))
-    sfr = sfr.drop(['time'], axis=1)
-    nms = sfr.columns.to_series()
+    # fix the sfr instruction file - only need one output time
     fname = 'sfr.csv'
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+
     ins_lines = open(os.path.join(t_d, fname_ins), 'r').readlines()
     with open(os.path.join(t_d, fname_ins), 'w') as f:
         for line in ins_lines[:3]:
             f.write(line)
 
-    # with open(os.path.join(t_d, fname_ins), 'w') as f:
-    #     f.write("pif ~\n")
-    #     f.write("l1 \n")
-    #     f.write("l1")
-    #     for i in range(sfr.shape[1]):
-    #         oname = "{0}".format(nms[i])
-    #         f.write(" ~,~ !{0}! ".format(oname))
     new_ins_files = [os.path.join(t_d, fname_ins)]
     new_out = [os.path.join(t_d, "sfr.csv")]
     new_ins_cycle = [-1]
@@ -1253,99 +796,44 @@ def monthly_ies_to_da(org_d):
     for ins_file in new_ins_files:
         pst.add_observations(ins_file, pst_path=".")
 
+    # now set cycles
     pst.observation_data.loc[:, 'cycle'] = -1
-    tr_obs = org_obs.loc[org_obs.obsnme.str.contains("hds_usecol:arrobs_head"), :].copy()
-    tr_obs.loc[tr_obs.obsnme, "time"] = tr_obs.time.apply(float)
-    tr_obs.loc[tr_obs.obsnme, "k"] = tr_obs.k.apply(int)
-    tr_obs.loc[tr_obs.obsnme, "i"] = tr_obs.i.apply(int)
-    tr_obs.loc[tr_obs.obsnme, "j"] = tr_obs.j.apply(int)
-    tr_obs.loc[tr_obs.obsnme, "obgnme"] = tr_obs.obsnme.apply(lambda x: "_".join(x.split("_")[:-1]))
 
-    head_obs = pst.observation_data.loc[pst.observation_data.obsnme.str.startswith("arrobs_head_"), :].copy()
-    for v in ["k", "i", "j"]:
-        head_obs.loc[:, v] = head_obs.loc[:, v].apply(int)
-
-    obs_heads = {}
-    odf_names = []
-    pst.observation_data.loc[:, "org_obgnme"] = np.NaN
-    pst.observation_data.loc[:, "weight"] = 0.0
-    pst.observation_data.loc["sfr_usecol:gage_1_time:10000.0", "weight"] = 1.0
-
-    for og in tr_obs.obgnme.unique():
-        site_obs = tr_obs.loc[tr_obs.obgnme == og, :]
-        site_obs.sort_values(by="time", inplace=True)
-        head_name = "arrobs_head_k:{0}_i:{1}_j:{2}".format(site_obs.k[0], site_obs.i[0], site_obs.j[0])
-        for i, oname in enumerate(site_obs.obsnme):
-            obs_heads[oname] = (head_name, i)
-        # assign max weight in the control file since some have zero weight and
-        # we are covering weights in the weight table
-        pst.observation_data.loc[head_name, "weight"] = site_obs.weight.max()
-        pst.observation_data.loc[head_name, "org_obgnme"] = og
-        odf_names.append(head_name)
-    odf_names.append("sfr_usecol:gage_1_time:10000.0")
-
-    odf = pd.DataFrame(columns=odf_names, index=np.arange(25))
-    wdf = pd.DataFrame(columns=odf_names, index=np.arange(25))
-    for tr_name, (head_name, icycle) in obs_heads.items():
-        odf.loc[icycle, head_name] = org_obs.loc[tr_name, "obsval"]
-        if icycle > 12:
-            wdf.loc[icycle, head_name] = 0
-        else:
-            wdf.loc[icycle, head_name] = org_obs.loc[tr_name, "weight"]
-
-    g_obs = org_obs.loc[org_obs.obsnme.str.startswith("sfr_usecol:gage_1"), :].copy()
-    # give these obs the max weight since some have zero weight
-    # pst.observation_data.loc["gage_1", "weight"] = g_obs.weight.max()
-    g_obs.sort_index(inplace=True)
-    for i, name in enumerate(g_obs.obsnme):
-        odf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = g_obs.loc[name, "obsval"]
-        if i > 12:
-            wdf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = 0
-        else:
-            wdf.loc[i, "sfr_usecol:gage_1_time:10000.0"] = g_obs.loc[name, "weight"]
-
-    # select obs that we actually want to assimilate: near-stream shallow head, gw_1, gw_2, and gage_1
-
-    odf = odf.T
-    odf = odf[odf.index.isin(keep)]
-    wdf = wdf.T
-    wdf = wdf[wdf.index.isin(keep)]
-
-    odf.to_csv(os.path.join(t_d, "obs_cycle_tbl.csv"))
-    pst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
-    wdf.to_csv(os.path.join(t_d, "weight_cycle_tbl.csv"))
-    pst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
-
-    # need to set cycle vals and reset the model_file attr for each cycle-specific template files (rch and wel)
+    # need to set cycle vals and reset the model_file attr
+    # for each cycle-specific template files (rch and wel)
     pst.model_input_data.loc[:, "cycle"] = -1
     for i in range(len(pst.model_input_data)):
-        # if pst.model_input_data.iloc[i,0].startswith('wel_grid'):
-        #     cy = int(pst.model_input_data.iloc[i,0].split('_')[2])
-        #     pst.model_input_data.iloc[i, 2] = cy
-        #     pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        # for time-varying well pars
         if pst.model_input_data.iloc[i, 0].startswith('twel_mlt'):
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
+            # set the cycle
             pst.model_input_data.iloc[i, 2] = cy
+            # point all template files to write the same input file (the first stress period file)
             pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        # spatially constant but temporally varying
         elif 'rch_recharge' in pst.model_input_data.iloc[i, 0] and "cn" in pst.model_input_data.iloc[i, 0]:
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
+            # set the cycle (one based)
             pst.model_input_data.iloc[i, 2] = cy - 1
+            # point all template files to write the same input file (the first stress period file)
             pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+        # spatially varying but temporal constant
         elif 'rch_recharge' in pst.model_input_data.iloc[i, 0] and pst.model_input_data.iloc[i, 0].endswith(".txt.tpl"):
             cy = int(pst.model_input_data.iloc[i, 0].split('.')[1].split("_")[-1])
+            # set the cycle value (one based)
             pst.model_input_data.iloc[i, 2] = cy - 1
+            # point all template files to write the same input file (the first stress period file)
             pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
 
+    # read all instruction files every cycle
     pst.model_output_data.loc[:, "cycle"] = -1
 
-    # need to set the cycle value for all pars - static properties and multi-stress period broadcast forcing pars
+    # need to set the cycle value for all pars - static properties and
+    # multi-stress period broadcast forcing pars
     # should get a cycle value of -1.
     pst.parameter_data.loc[:, "cycle"] = -1
 
     for pname in pst.par_names:
-        # if pst.parameter_data.iloc[i,0].startswith('wel_grid'):
-        #     cy = int(pst.parameter_data.iloc[i,0].split('_')[2])
-        #     pst.parameter_data.iloc[i, 22] = cy
         if pname.startswith('twel_mlt'):
             cy = int(pname.split('_')[2])
             pst.parameter_data.loc[pname, "cycle"] = cy
@@ -1353,13 +841,10 @@ def monthly_ies_to_da(org_d):
             cy = int(pname.split('_')[4])
             pst.parameter_data.loc[pname, "cycle"] = cy - 1
 
-
-
     pst.control_data.noptmax = 3
     pst.write(os.path.join(t_d, "freyberg.pst"), version=2)
-    # return pst
 
-    # fill any missing pars with ctl file values (esp the perlen par)
+    # fill any missing pars in the prior ensemble with ctl file values (esp the perlen par)
     pe = pyemu.ParameterEnsemble.from_binary(pst=pst, filename=os.path.join(t_d, "prior.jcb"))
     pepars = set(pe.columns.tolist())
     pstpars = set(pst.par_names)
@@ -1372,106 +857,35 @@ def monthly_ies_to_da(org_d):
         pe.loc[idx, missing] = mvals
     pe.to_binary(os.path.join(t_d, "prior.jcb"))
 
+    # make a test run
     pst.control_data.noptmax = 0
     pst.write(os.path.join(t_d, "test.pst"), version=2)
     pyemu.os_utils.run("pestpp-da test.pst", cwd=t_d)
 
 
 def run_batch_seq_prior_monte_carlo():
+    """run prior monte carlo for the batch and seq monthly models
+    """
     t_d = "seq_monthly_model_files_template"
     pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
     pst.control_data.noptmax = -1
-    pst.write(os.path.join(t_d,"freyberg.pst"))
+    pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
     pyemu.os_utils.start_workers(t_d, "pestpp-da", "freyberg.pst", num_workers=10,
                                  master_dir=t_d.replace("template", "master_prior"))
 
     t_d = "monthly_model_files_template"
     pst = pyemu.Pst(os.path.join(t_d, "freyberg.pst"))
     pst.control_data.noptmax = -1
-    pst.write(os.path.join(t_d, "freyberg.pst"))
+    pst.write(os.path.join(t_d, "freyberg.pst"),version=2)
     pyemu.os_utils.start_workers(t_d, "pestpp-ies", "freyberg.pst", num_workers=10,
                                  master_dir=t_d.replace("template", "master_prior"))
 
 
-def plot_prior_mc_old():
-    c_m_d = "daily_model_files_master_prior"
-    s_b_m_d = "monthly_model_files_master_prior"
-    s_s_m_d = "seq_monthly_model_files_master_prior"
-
-    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
-    obs = c_pst.observation_data
-    ctr_obs = obs.loc[obs.obsnme.str.contains("trgw"), :].copy()
-    ctr_obs.loc[:, "k"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[2]))
-    ctr_obs.loc[:, "i"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[3]))
-    ctr_obs.loc[:, "j"] = ctr_obs.obsnme.apply(lambda x: int(x.split("_")[4]))
-    ctr_obs.loc[:, "time"] = ctr_obs.time.apply(float)
-    print(ctr_obs.obgnme.unique())
-
-
-    s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
-    obs = s_b_pst.observation_data
-    tr_obs = obs.loc[obs.obsnme.str.contains("trgw"),:].copy()
-    tr_obs.loc[:,"k"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[2]))
-    tr_obs.loc[:, "i"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[3]))
-    tr_obs.loc[:, "j"] = tr_obs.obsnme.apply(lambda x: int(x.split("_")[4]))
-    tr_obs.loc[:,"time"] = tr_obs.time.apply(float)
-
-    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
-    s_b_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-
-    s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
-    seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
-    s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
-    #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
-
-    ognames = list(tr_obs.obgnme.unique())
-    ognames.sort()
-    ognames.append("sfr_usecol:gage_1")
-    with PdfPages("prior_obs_v_sim.pdf") as pdf:
-
-        for ogname in ognames:
-            sbobs = tr_obs.loc[tr_obs.obgnme == ogname, :].copy()
-
-            if "gage" in ogname:
-                seq_name ="gage_1"
-                cogname = ogname
-                sbobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obgnme==ogname,:].copy()
-                sbobs.loc[:,"time"] = sbobs.time.apply(float)
-                cobs = c_pst.observation_data.loc[c_pst.observation_data.obgnme == ogname, :].copy()
-                cobs.loc[:, "time"] = cobs.time.apply(float)
-
-            else:
-                sbobs = tr_obs.loc[tr_obs.obgnme == ogname, :].copy()
-                sbobs.sort_values(by="time", inplace=True)
-                k,i,j = sbobs.k.iloc[0],sbobs.i.iloc[0],sbobs.j.iloc[0]
-                seq_name = "arrobs_head_k:{0}_i:{1}_j:{2}".format(k,i,j)
-                cogname = "hds_usecol:trgw_{0}_{1}_{2}".format(k,2+(i*3),2+(j*3))
-                print(ogname,cogname)
-                cobs = ctr_obs.loc[ctr_obs.obgnme==cogname,:].copy()
-            sbobs.sort_values(by="time", inplace=True)
-            cobs.sort_values(by="time",inplace=True)
-
-
-            fig,ax = plt.subplots(1,1,figsize=(8,8))
-
-            [ax.plot(cobs.time, c_oe.loc[idx, cobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
-
-            [ax.plot(sbobs.time,s_b_oe.loc[idx,sbobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe.index]
-            for itime,time in enumerate(sbobs.time):
-                oe = s_s_oe_dict[itime]
-                #print(oe.loc[:,seq_name])
-                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
-
-
-            ax.set_title(ogname)
-            if "gage" not in ogname:
-                ax.set_ylim(30,ax.get_ylim()[1])
-            pdf.savefig()
-            plt.close(fig)
-
-
 
 def plot_prior_mc():
+    """plot the prior monte carlo results for daily, monthly batch and monthly sequential
+
+    """
     c_m_d = "daily_model_files_master_prior"
     s_b_m_d = "monthly_model_files_master_prior"
     s_s_m_d = "seq_monthly_model_files_master_prior"
@@ -1504,7 +918,6 @@ def plot_prior_mc():
             sgobs.sort_values(by="time", inplace=True)
             cgobs.sort_values(by="time",inplace=True)
 
-
             fig,ax = plt.subplots(1,1,figsize=(8,8))
 
             [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
@@ -1528,63 +941,129 @@ def plot_prior_mc():
 
 
 def map_complex_to_simple_bat(c_d,b_d,real_idx):
-    cpst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
+    """map the daily model outputs to the monthly model observations
+
+    Args:
+        c_d (str): the daily (complex) model prior monte carlo master dir
+        b_d (str): the monthly (simple) batch model tmeplate dir
+        real_idx (int): the complex model prior monte carlo obs ensemble index position
+            to use as the observations for the monthly model
+
+    """
+
+    # load the daily model prior MC obs ensemble and get the simulated values
     coe = pd.read_csv(os.path.join(c_d,"freyberg.0.obs.csv"),index_col=0)
     cvals = coe.loc[real_idx,:]
 
+    # load the batch monthly model control file
     bpst = pyemu.Pst(os.path.join(b_d,"freyberg.pst"))
     obs = bpst.observation_data
+    # assign all common observations
     obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
+
+    # set some weights - only the first 12 months (not counting spin up time)
+    # just picked weights that seemed to balance-ish the one realization I looked at...
     obs.loc[:,"weight"] = 0.0
     for k in keep:
         kobs = obs.loc[obs.obsnme.str.contains(k),:].copy()
         kobs.loc[:,"time"] = kobs.time.apply(float)
         kobs.sort_values(by="time",inplace=True)
-        obs.loc[kobs.obsnme[:12],"weight"] = 1.0 #generic weight - will be set later
+        if "gage" in k:
+            obs.loc[kobs.obsnme[1:13], "weight"] = 0.005
+        else:
+            obs.loc[kobs.obsnme[1:13],"weight"] = 2.0
 
     assert bpst.nnz_obs == 48
+    # setup a template dir for this complex model realization
     t_d = b_d + "_{0}".format(real_idx)
     if os.path.exists(t_d):
         shutil.rmtree(t_d)
     shutil.copytree(b_d,t_d)
-    bpst.write(os.path.join(t_d,"freyberg.pst"))
+    bpst.write(os.path.join(t_d,"freyberg.pst"),version=2)
     return t_d
 
 def map_simple_bat_to_seq(b_d,s_d):
+    """map obs vals and weights from monthly batch to sequential
+
+    Args:
+        b_d (str): batch template dir with obs vals and weights set
+        s_d (str): generic sequential template dir
+
+
+    """
+
+    # load the batch control file
     bpst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
     bobs = bpst.observation_data
-    seq_names = set([o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names if "hds_usecol" in o])
-    print(seq_names)
+
+    # work on the sequential obs names - yuck
+    seq_names = [o.split("_time")[0].replace("hds_usecol:","") if "hds_usecol" in o else o for o in bpst.nnz_obs_names ]
+    seq_names = set([o for o in seq_names if "arrobs" in o or "time:10000.0" in o ])
+
+    # load the sequential control file
     spst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
+    spst.observation_data.loc[:,"weight"] = 0.0
     snames = set(spst.obs_names)
     assert len(seq_names - snames) == 0
     seq_names = list(seq_names)
     seq_names.sort()
+
     sobs = spst.observation_data.loc[seq_names]
-    df = pd.DataFrame(columns = np.arange(25),index=seq_names)
+
+    # build the weight and obs cycle tables
+    odf = pd.DataFrame(columns = np.arange(25),index=seq_names)
+    wdf = pd.DataFrame(columns=np.arange(25), index=seq_names)
+    wdf.loc[:,:] = 0.0
     for seq_name in seq_names:
+
+        # the batch obs info for this sequential obs name
         bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name),:].copy()
+        # sort by float time
         bsobs.loc[:,"time"] = bsobs.time.apply(float)
         bsobs.sort_values(by="time",inplace=True)
-        df.loc[seq_name,np.arange(12)] = bsobs.obsval.iloc[:12].values
-    assert df.iloc[0,0] == bobs.loc[bpst.nnz_obs_names[0],"obsval"]
+        # set the values for the 2nd thru 13th stress period/cycle
+        odf.loc[seq_name,np.arange(1,13)] = bsobs.obsval.iloc[1:13].values
+        wdf.loc[seq_name, np.arange(1,13)] = bsobs.weight.iloc[1:13].values
+        spst.observation_data.loc[seq_name,"weight"] = 1.0 #just a generic weight, overridden by weight table
 
+    # some sanity checks
+    print(odf.iloc[0,1])
+    print(bobs.loc[bpst.nnz_obs_names[1],"obsval"])
+    assert odf.iloc[0,1] == bobs.loc[bpst.nnz_obs_names[0],"obsval"]
+    assert wdf.iloc[0, 1] == bobs.loc[bpst.nnz_obs_names[0], "weight"]
 
+    # setup the seq template for this complex realization
+    t_d = "seq_" + b_d
+    if os.path.exists(t_d):
+        shutil.rmtree(t_d)
+    shutil.copytree(s_d,t_d)
+    # save and point to the cycle tables
+    odf.to_csv(os.path.join(t_d,"obs_cycle_tbl.csv"))
+    wdf.to_csv(os.path.join(t_d,"weight_cycle_tbl.csv"))
+    spst.pestpp_options["da_weight_cycle_table"] = "weight_cycle_tbl.csv"
+    spst.pestpp_options["da_observation_cycle_table"] = "obs_cycle_tbl.csv"
 
+    # test run with noptmax = 0
+    spst.control_data.noptmax = 0
+    spst.pestpp_options["da_verbose_level"] = 3
+    spst.write(os.path.join(t_d,"freyberg.pst"),version=2)
+    pyemu.os_utils.run("pestpp-da freyberg.pst",cwd=t_d)
+    return t_d
 
 
 if __name__ == "__main__":
 
-
     #setup_interface("monthly_model_files")
     #monthly_ies_to_da("monthly_model_files_template")
     b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
-    map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     #process_complex_target_output('daily_model_files_master_prior','monthly_model_files_template','seq_monthly_model_files_template',1 )
     #run_batch_seq_prior_monte_carlo()
     #setup_interface("daily_model_files")
     #run_complex_prior_mc('daily_model_files_template')
     #plot_prior_mc()
+
+    #compare_mf6_freyberg()
 
     exit()
 
