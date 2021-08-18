@@ -33,7 +33,13 @@ ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
 keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
 keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
+keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
+forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
+forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
+forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
+forecast_units = ["$\\frac{ft^3}{d}","$\\frac{ft^3}{d}","$ft$"]
+
 
 def clean_master_dirs():
     for i in range(100):
@@ -1024,12 +1030,11 @@ def plot_obs_v_sim2():
             s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
                               seq_oe_files_pt}
 
-            #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
 
-            #ognames = list(cobs.obgnme.unique())
-            #ognames.sort()
-            #ognames.append("sfr_usecol:gage_1")
             ognames = keep
+            ognames.extend(forecast)
+            label_dict = keep_dict
+            label_dict.update(forecast_dict)
 
             for ogname in ognames:
                 fig, axes = plt.subplots(2, 1, figsize=(8, 8))
@@ -1045,18 +1050,18 @@ def plot_obs_v_sim2():
 
 
                 ax = axes[0]
-                ax.set_title("A) batch formulation {0}, realization {1}".format(keep_dict[ogname],c_oe.index[ireal]),loc="left")
-                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=1.0,alpha=0.5)
-                ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+                ax.set_title("A) batch formulation {0}, realization {1}".format(label_dict[ogname],c_oe.index[ireal]),loc="left")
+
 
                 [ax.plot(sgobs.time,s_b_oe_pr.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe_pr.index]
                 [ax.plot(sgobs.time, s_b_oe_pt.loc[idx, sgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in
                  s_b_oe_pt.index]
+                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+                ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
                 ax = axes[1]
-                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=1.0, alpha=0.5)
-                ax.scatter(sgnzobs.time,sgnzobs.obsval,marker="^",color="r")
+
                 seq_name = ogname
-                if "gage" in ogname:
+                if "arrobs" not in ogname:
                     seq_name = ogname + "_time:10000.0"
                 print(seq_name)
                 for itime,time in enumerate(sgobs.time):
@@ -1072,14 +1077,111 @@ def plot_obs_v_sim2():
                         # print(oe.loc[:,seq_name])
                         ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="b",
                                    alpha=0.5)
-
-                ax.set_title("B) sequential formulation {0}, realization {1}".format(keep_dict[ogname], c_oe.index[ireal]),loc="left")
+                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+                ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+                ax.set_title("B) sequential formulation {0}, realization {1}".format(label_dict[ogname], c_oe.index[ireal]),loc="left")
                 #if "gage" not in ogname:
                 #    ax.set_ylim(30,ax.get_ylim()[1])
                 plt.tight_layout()
                 pdf.savefig()
                 plt.close(fig)
-            
+
+
+def plot_domain():
+    sim = flopy.mf6.MFSimulation.load(sim_ws="template")
+    m = sim.get_model("freyberg6")
+    wel_data = m.wel.stress_period_data.array[0]
+    sfr_data = m.sfr.packagedata.array
+    ghb_data = m.ghb.stress_period_data.array[0]
+    ib = m.dis.idomain.array[0, :, :]
+    ib_cmap = plt.get_cmap("Greys_r")
+    ib_cmap.set_bad(alpha=0.0)
+
+    pst = pyemu.Pst(os.path.join("template","freyberg6_run.pst"))
+
+    fig,ax = plt.subplots(1,1,figsize=(8,8))
+
+    ib = np.ma.masked_where(ib!=0,ib)
+
+    ax.imshow(ib,cmap=ib_cmap,extent=m.modelgrid.extent)
+    for ii,cid in enumerate(wel_data.cellid):
+        i,j = cid[1],cid[2]
+        verts = m.modelgrid.get_cell_vertices(i, j)
+        if ii == wel_data.shape[0] - 1:
+            p = Polygon(verts, facecolor='b',label="extraction well")
+        else:
+            p = Polygon(verts, facecolor='b')
+        ax.add_patch(p)
+    for ii,cid in enumerate(ghb_data.cellid):
+        i,j = cid[1],cid[2]
+        verts = m.modelgrid.get_cell_vertices(i, j)
+        if ii == ghb_data.shape[0] - 1:
+            p = Polygon(verts, facecolor='m',label="GHB cell")
+        else:
+            p = Polygon(verts, facecolor='m')
+        ax.add_patch(p)
+    for cid in sfr_data.cellid:
+        i, j = cid[1], cid[2]
+        verts = m.modelgrid.get_cell_vertices(i, j)
+        if i < 20:
+            c = "g"
+        else:
+            c = "c"
+        if i == 19:
+            p = Polygon(verts, facecolor=c, label="SFR headwater reaches")
+        elif i == 39:
+            p = Polygon(verts, facecolor=c, label="SFR tailwater reaches")
+        else:
+            p = Polygon(verts, facecolor=c)
+        ax.add_patch(p)
+    #ax.text(m.modelgrid.xcellcenters[10,j],m.modelgrid.ycellcenters[10,j],"headwater sw-gw exchange forecast reaches",rotation=90,ha="center",va="center")
+    #spnspecs.add_text(ax=ax,x=m.modelgrid.xcellcenters[10,j],y=m.modelgrid.ycellcenters[10,j],text="headwater sw-gw exchange forecast reaches",
+    #                  rotation=90,ha="center",va="center",bold=False, italic=False,transform=False,bbox={"facecolor":"none","edgecolor":"none"})
+    #ax.text(m.modelgrid.xcellcenters[30, j], m.modelgrid.ycellcenters[30, j], "tailwater sw-gw exchange forecast reaches", rotation=90, ha="center",
+    #        va="center")
+    #spnspecs.add_text(ax=ax, x=m.modelgrid.xcellcenters[30, j], y=m.modelgrid.ycellcenters[30, j],
+    #                  text="tailwater sw-gw exchange forecast reaches", rotation=90, ha="center", va="center")
+
+    x = m.modelgrid.xcellcenters[i, j]
+    y = m.modelgrid.ycellcenters[i, j]
+    ax.scatter([x],[y],marker="^",c='r',s=100,zorder=10,label="point observation/forecast location")
+    ax.text(x + 150, y+150, "sw_1".format(1), zorder=11, bbox=dict(facecolor='w', alpha=1,edgecolor="none",pad=1))
+    ylim = ax.get_ylim()
+
+    nz_obs = pst.observation_data.loc[pst.nnz_obs_names,:].copy()
+    nz_obs = nz_obs.loc[nz_obs.obsnme.str.startswith("trgw"),:]
+    nz_obs.loc[:, "i"] = nz_obs.obsnme.apply(lambda x: int(x.split('_')[2]))
+    nz_obs.loc[:, "j"] = nz_obs.obsnme.apply(lambda x: int(x.split('_')[3]))
+    for ii,g in enumerate(nz_obs.obgnme.unique()):
+        i = nz_obs.loc[nz_obs.obgnme == g, "i"][0]
+        j = nz_obs.loc[nz_obs.obgnme == g, "j"][0]
+        x = m.modelgrid.xcellcenters[i, j]
+        y = m.modelgrid.ycellcenters[i, j]
+        ax.scatter([x], [y], marker="^", c='r', s=100, zorder=10)
+        ax.text(x + 150, y+150,"gw_{0}".format(ii+1),zorder=11, bbox=dict(facecolor='w', alpha=1,edgecolor="none",pad=1))
+
+    gw_fore = [f for f in forecasts if "trgw" in f][0]
+    i = int(gw_fore.split('_')[2])
+    j = int(gw_fore.split('_')[3])
+    x = m.modelgrid.xcellcenters[i, j]
+    y = m.modelgrid.ycellcenters[i, j]
+    ax.scatter([x], [y], marker="^", c='r', s=100, zorder=10)
+    ax.text(x + 150, y + 150, "gw_3", zorder=11,
+            bbox=dict(facecolor='w', alpha=1, edgecolor="none", pad=1))
+
+    top = m.dis.top.array.reshape(ib.shape)
+    top[top<0] = np.NaN
+    cb = ax.imshow(top,extent=m.modelgrid.extent,cmap="bone")
+    cb = plt.colorbar(cb,pad=0.01)
+    cb.set_label("top $ft$")
+    ax.set_xlabel("x $ft$")
+    ax.set_ylabel("y $ft$")
+
+    ax.set_ylim(0,ylim[1])
+    spnspecs.graph_legend(ax=ax,bbox_to_anchor=(1.15, 0.9))
+    plt.tight_layout()
+    plt.savefig(os.path.join(plt_dir,"domain.pdf"))
+    plt.close("all")
 
 
 if __name__ == "__main__":
