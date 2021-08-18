@@ -32,6 +32,8 @@ da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
 keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
+keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
+keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 
 def clean_master_dirs():
     for i in range(100):
@@ -76,16 +78,6 @@ def compare_mf6_freyberg(num_workers=10):
         da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg.pst"))
 
         ies_pst.pestpp_options["ies_par_en"] = "prior.jcb"
-        # ies_pe = pyemu.ParameterEnsemble.from_binary(pst=ies_pst, filename=os.path.join(ies_t_d, "prior.jcb"))
-        # da_pe = pyemu.ParameterEnsemble.from_gaussian_draw(pst=da_pst,
-        #                                                    cov=pyemu.Cov.from_parameter_data(da_pst),
-        #                                                    num_reals=ies_pe.shape[0])
-        # da_pe.index = ies_pe.index
-        # d = set(da_pe.columns.tolist()).symmetric_difference(set(ies_pe.columns.tolist()))
-        # print(d)
-        # da_pe.loc[:, ies_pe.columns] = ies_pe.values
-        # da_pe.to_binary(os.path.join(da_t_d, "da_prior.jcb"))
-        # da_pst.pestpp_options["ies_par_en"] = "da_prior.jcb"
 
         # set pestpp options for batch da
         ies_pst.pestpp_options.pop("ies_num_reals", None)
@@ -96,7 +88,7 @@ def compare_mf6_freyberg(num_workers=10):
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
         ies_pst.pestpp_options["ies_drop_conflicts"] = False
-        ies_pst.pestpp_options["ies_num_reals"] = 100
+        ies_pst.pestpp_options["ies_num_reals"] = 50
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
@@ -110,7 +102,7 @@ def compare_mf6_freyberg(num_workers=10):
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
         da_pst.pestpp_options["ies_drop_conflicts"] = False
-        da_pst.pestpp_options["ies_num_reals"] = 100
+        da_pst.pestpp_options["ies_num_reals"] = 50
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
@@ -130,7 +122,7 @@ def compare_mf6_freyberg(num_workers=10):
                                      num_workers=4, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
-        break
+
 
 
 def run_complex_prior_mc(c_t):
@@ -268,73 +260,48 @@ def s_plot():
 
 def plots_obs_v_sim():
     noptmax = 3
-    start_date = pd.to_datetime('20151231', format='%Y%m%d')
-    c_d = 'complex_master'
-    redis_fac = 3.
+    start_date = pd.to_datetime('20151231', format='%Y%m%d') - pd.to_timedelta(10000,unit="d")
+    c_d = 'daily_model_files_master_prior'
 
+    cpst = pyemu.Pst(os.path.join(c_d,"freyberg.pst"))
     # load in obs ensemble
     oe_f = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"), index_col=0)
     oe_f = oe_f.T
 
     # process obs
-    hds_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("hds")), :].copy()
-    hds_f.loc[:, "k"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[2]))
-    hds_f.loc[:, "i"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[3]))
-    hds_f.loc[:, "j"] = hds_f.index.to_series().apply(lambda x: int(x.split('_')[4]))
-    hds_f.loc[:, "int_time"] = hds_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    time = hds_f.loc[:, "int_time"]
-    time = pd.to_timedelta(time.values - 1, unit='D')
-    hds_f.loc[:, "org_time"] = start_date + time.values
-    hds_f.loc[:, "org_time"] = hds_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
-    hds_f.loc[:, "org_i"] = (hds_f.i / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_j"] = (hds_f.j / redis_fac).apply(np.int)
-    hds_f.loc[:, "org_obgnme"] = hds_f.apply(lambda x: "trgw_{0}_{1}_{2}".format(x.k, x.org_i, x.org_j),
-                                             axis=1)
-
-    sfr_f = oe_f.loc[oe_f.index.to_series().apply(lambda x: x.startswith("sfr")), :].copy()
-    sfr_f.loc[:, "int_time"] = sfr_f.index.to_series().apply(lambda x: float(x.split('_')[-1].split(':')[1]))
-    type = sfr_f.index.to_series().apply(lambda x: x.split(':')[1].split('_')[0])
-    type = pd.DataFrame(type)
-    # type = type.replace('gage', 'gage_1')
-    sfr_f.loc[:, "type"] = type.values
-    time = sfr_f.loc[:, "int_time"]
-    time = pd.to_timedelta(time.values - 1, unit='D')
-    sfr_f.loc[:, "org_time"] = start_date + time.values
-    sfr_f.loc[:, "org_time"] = sfr_f.loc[:, "org_time"].apply(lambda x: x.strftime('%Y%m%d'))
-    sfr_f.loc[:, "org_obgnme"] = sfr_f.apply(lambda x: "{0}".format(x.type), axis=1)
-
-    frames = [hds_f, sfr_f]
-
-    complex_obs = pd.concat(frames)
+    cobs = cpst.observation_data
+    cobs.loc[:,"time"] = cobs.time.apply(float)
 
     with PdfPages(os.path.join("obs_v_sim.pdf")) as pdf:
         for i in range(100):
-            da_m_d = os.path.join("simple_master2_da_{0}".format(i))
-            ies_m_d = os.path.join("simple_master2_ies_{0}".format(i))
-            ies_case = "freyberg6_run_ies"
-            da_case = "freyberg6_run_da"
+            da_m_d = os.path.join("seq_monthly_model_files_master_{0}".format(i))
+            ies_m_d = os.path.join("monthly_model_files_master_{0}".format(i))
+            ies_case = "freyberg"
+            da_case = "freyberg"
+            if not os.path.exists(da_m_d) or not os.path.exists(ies_m_d):
+                break
 
             ies_pst = pyemu.Pst(os.path.join(ies_m_d, ies_case + ".pst"))
-            ies_obs = ies_pst.observation_data  # .loc[ies_pst.nnz_obs_names,:]
-            ies_obs = ies_obs.loc[ies_obs.obgnme.apply(lambda x: x in ies_pst.nnz_obs_groups), :]
-            ies_obs.loc[:, "datetime"] = pd.to_datetime(ies_obs.obsnme.apply(lambda x: x.split('_')[-1]),
-                                                        format='%Y%m%d')
+            ies_obs = ies_pst.observation_data
+            ies_obs = ies_obs.loc[ies_obs.weight > 0, :]
+            ies_obs.loc[:,"time"] = ies_obs.time.apply(float)
 
             ies_pr_oe = pd.read_csv(os.path.join(ies_m_d, ies_case + ".0.obs.csv"))
-            ies_pt_oe = pd.read_csv(os.path.join(ies_m_d, ies_case + ".{0}.obs.csv".format(noptmax)))
+            ies_pt_oe = pd.read_csv(os.path.join(ies_m_d, ies_case + ".{0}.obs.csv".format(ies_pst.control_data.noptmax)))
 
             da_pst = pyemu.Pst(os.path.join(da_m_d, da_case + ".pst"))
             da_obs = da_pst.observation_data.loc[da_pst.nnz_obs_names, :].copy()
-            da_obs.loc[da_obs.obsnme.str.contains("gage"), "org_obgnme"] = "gage"
 
-            num_cycles = 25
+
             da_pr_dict = {}
             da_pt_dict = {}
-            for cycle in range(num_cycles):
+            times = ies_obs.time.unique()
+            times.sort()
+            for cycle,time in enumerate(times):
                 print(cycle)
                 da_pr_oe = pd.read_csv(os.path.join(da_m_d, da_case + ".{0}.0.obs.csv".format(cycle)))
                 da_pr_dict[cycle] = da_pr_oe
-                pt_file = os.path.join(da_m_d, da_case + ".{0}.{1}.obs.csv".format(cycle, noptmax))
+                pt_file = os.path.join(da_m_d, da_case + ".{0}.{1}.obs.csv".format(cycle, da_pst.control_data.noptmax))
                 if (os.path.exists(pt_file)):
                     da_pt_oe = pd.read_csv(pt_file)
                     da_pt_dict[cycle] = da_pt_oe
@@ -345,62 +312,46 @@ def plots_obs_v_sim():
 
             for og in ies_og_uvals:
                 ies_obs_og = ies_obs.loc[ies_obs.obgnme == og, :].copy()
-                ies_obs_og.sort_values(by="datetime", inplace=True)
-                da_obs_og = da_obs.loc[da_obs.org_obgnme == og, :]
-                cmplx_obs_og = complex_obs.loc[complex_obs.org_obgnme == og, :].copy()
-                cmplx_obs_og.sort_values(by="int_time", inplace=True)
-                print(cmplx_obs_og.int_time)
-                tms = pd.date_range(start='2015-12-31', periods=731, freq='D')
-                dts = ies_obs_og.datetime.values
+                ies_obs_og.sort_values(by="time", inplace=True)
+                da_obs_og = da_obs.loc[da_obs.obgnme == og, :]
+                cmplx_obs_og = cobs.loc[cobs.obgnme == og, :].copy()
+                cmplx_obs_og.sort_values(by="time", inplace=True)
+                assert ies_obs_og.shape[0] > 0
+                assert da_obs_og.shape[0] > 0
+                assert cmplx_obs_og.shape[0] > 0
+                #tms = pd.date_range(start='2015-12-31', periods=731, freq='D')
+                #dts = ies_obs_og.datetime.values
 
                 def make_plot(axes):
                     ax = axes[0]
                     ax.set_title("batch DA, complex real {0}, observation location: ".format(i) + og, loc="left")
-                    [ax.plot(dts, ies_pr_oe.loc[idx, ies_obs_og.obsnme], "0.5", alpha=0.5, lw=0.25) for idx in
+                    [ax.plot(ies_obs_og.time, ies_pr_oe.loc[idx, ies_obs_og.obsnme], "0.5", alpha=0.5, lw=0.25) for idx in
                      ies_pr_oe.index]
-                    [ax.plot(dts, ies_pt_oe.loc[idx, ies_obs_og.obsnme], "b", alpha=0.5, lw=0.5) for idx in
+                    [ax.plot(ies_obs_og.time, ies_pt_oe.loc[idx, ies_obs_og.obsnme], "b", alpha=0.5, lw=0.5) for idx in
                      ies_pt_oe.index]
-                    ax.plot(dts, ies_pr_oe.loc[ies_pr_oe.index[0], ies_obs_og.obsnme], "0.5", alpha=0.5,
+                    ax.plot(ies_obs_og.time, ies_pr_oe.loc[ies_pr_oe.index[0], ies_obs_og.obsnme], "0.5", alpha=0.5,
                             lw=0.1, label="prior real")
-                    ax.plot(dts, ies_pt_oe.loc[ies_pt_oe.index[0], ies_obs_og.obsnme], "b", alpha=0.5,
+                    ax.plot(ies_obs_og.time, ies_pt_oe.loc[ies_pt_oe.index[0], ies_obs_og.obsnme], "b", alpha=0.5,
                             lw=0.1, label="post real")
                     # ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
-                    ax.plot(tms, cmplx_obs_og.iloc[:, i], 'r', label="truth")
+                    ax.plot(cmplx_obs_og.time, cmplx_obs_og.iloc[:, i], 'r', label="truth")
                     ies_obs_nz = ies_obs_og.loc[ies_obs_og.weight > 0, :]
 
-                    ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r", s=50,
+                    ax.scatter(ies_obs_nz.time, ies_obs_nz.obsval, marker="^", color="r", s=50,
                                zorder=10, label="obs")
                     ax.legend(loc="upper right")
                     ax = axes[1]
 
                     ax.set_title(
-                        "sequential DA, complex real {0}, observation location: ".format(i) + da_obs_og.obsnme.values[
-                            0],
+                        "sequential DA, complex real {0}, observation location: ".format(i) + og,
                         loc="left")
                     # ax.plot(dts, ies_obs_og.obsval, "r", label="truth")
-                    ax.plot(tms, cmplx_obs_og.iloc[:, i], 'r', label="truth")
+                    ax.plot(cmplx_obs_og.time, cmplx_obs_og.iloc[:, i], 'r', label="truth")
                     ax.scatter(ies_obs_nz.datetime.values, ies_obs_nz.obsval, marker="^", color="r",
                                s=50, zorder=10, label="obs")
 
                     post_labeled = False
-                    # for ccycle in range(cycle):
-                    #     da_pr_oe = da_pr_dict[ccycle]
-                    #     label = None
-                    #     if ccycle == 0:
-                    #         label = "prior real"
-                    #     ax.scatter([dts[ccycle] for _ in range(da_pr_oe.shape[0])],
-                    #                da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
-                    #                marker=".", color="0.5", label=label)
-                    #
-                    #     if ccycle in da_pt_dict:
-                    #         da_pt_oe = da_pt_dict[ccycle]
-                    #         label = None
-                    #         if not post_labeled:
-                    #             label = "post real"
-                    #             post_labeled = True
-                    #         ax.scatter([dts[ccycle] for _ in range(da_pt_oe.shape[0])],
-                    #                    da_pt_oe.loc[:, da_obs_og.obsnme[0]].values,
-                    #                    marker=".", color="b", label=label)
+
                     ax.set_ylim(axes[0].get_ylim())
                     ax.legend(loc="upper right")
 
@@ -408,29 +359,19 @@ def plots_obs_v_sim():
 
                 fig, axes = plt.subplots(2, 1, figsize=(8, 8))
                 make_plot(axes)
-                for cycle in range(num_cycles):
+                cycles = list(da_pr_dict.keys())
+                cycles.sort()
+                for cycle in cycles:
                     da_pr_oe = da_pr_dict[cycle]
                     ax = axes[1]
-                    ax.scatter([dts[cycle] for _ in range(da_pr_oe.shape[0])],
+                    ax.scatter([times[cycle] for _ in range(da_pr_oe.shape[0])],
                                da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
                                marker=".", color="0.5")
                     ax.set_ylim(axes[0].get_ylim())
 
-                # plt.tight_layout()
-                # pdf.savefig()
-                # plt.close(fig)
-
-                # posterior
-                # fig, axes = plt.subplots(2, 1, figsize=(8, 8))
-                # make_plot(axes)
-                for cycle in range(num_cycles):
-                    da_pr_oe = da_pr_dict[cycle]
-                    ax.scatter([dts[cycle] for _ in range(da_pr_oe.shape[0])],
-                               da_pr_oe.loc[:, da_obs_og.obsnme[0]].values,
-                               marker=".", color="0.5")
                     if cycle in da_pt_dict:
                         da_pt_oe = da_pt_dict[cycle]
-                        ax.scatter([dts[cycle] for _ in range(da_pt_oe.shape[0])],
+                        ax.scatter([times[cycle] for _ in range(da_pt_oe.shape[0])],
                                    da_pt_oe.loc[:, da_obs_og.obsnme[0]].values,
                                    marker=".", color="b")
                         ax.set_ylim(axes[0].get_ylim())
@@ -1051,19 +992,110 @@ def map_simple_bat_to_seq(b_d,s_d):
     return t_d
 
 
+def plot_obs_v_sim2():
+    """plot the results for daily, monthly batch and monthly sequential
+
+    """
+    c_m_d = "daily_model_files_master_prior"
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    cobs = c_pst.observation_data
+    #cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
+    cobs.loc[:, "time"] = cobs.time.apply(float)
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+
+
+    with PdfPages("obs_v_sim.pdf") as pdf:
+        for ireal in range(100):
+            s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
+            s_s_m_d = "seq_monthly_model_files_master_{0}".format(ireal)
+            if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+                break
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+                                    index_col=0)
+
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith("freyberg")]
+
+            s_s_oe_dict_pr = {int(f.split(".")[1]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
+
+            #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
+
+            #ognames = list(cobs.obgnme.unique())
+            #ognames.sort()
+            #ognames.append("sfr_usecol:gage_1")
+            ognames = keep
+
+            for ogname in ognames:
+                fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+                cgobs = cobs.loc[cobs.obsnme.str.contains(ogname),:].copy()
+                sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+
+                sgobs.loc[:,"time"] = sgobs.time.apply(float)
+                cgobs.loc[:, "time"] = cgobs.time.apply(float)
+                sgnzobs = sgobs.loc[sgobs.weight > 0, :].copy()
+
+                sgobs.sort_values(by="time", inplace=True)
+                cgobs.sort_values(by="time",inplace=True)
+
+
+                ax = axes[0]
+                ax.set_title("A) batch formulation {0}, realization {1}".format(keep_dict[ogname],c_oe.index[ireal]),loc="left")
+                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=1.0,alpha=0.5)
+                ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+
+                [ax.plot(sgobs.time,s_b_oe_pr.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe_pr.index]
+                [ax.plot(sgobs.time, s_b_oe_pt.loc[idx, sgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in
+                 s_b_oe_pt.index]
+                ax = axes[1]
+                ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=1.0, alpha=0.5)
+                ax.scatter(sgnzobs.time,sgnzobs.obsval,marker="^",color="r")
+                seq_name = ogname
+                if "gage" in ogname:
+                    seq_name = ogname + "_time:10000.0"
+                print(seq_name)
+                for itime,time in enumerate(sgobs.time):
+                    itime += 1
+
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+                        #print(oe.loc[:,seq_name])
+                        ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
+                    if itime in s_s_oe_dict_pt:
+                        oe = s_s_oe_dict_pt[itime]
+                        # print(oe.loc[:,seq_name])
+                        ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="b",
+                                   alpha=0.5)
+
+                ax.set_title("B) sequential formulation {0}, realization {1}".format(keep_dict[ogname], c_oe.index[ireal]),loc="left")
+                #if "gage" not in ogname:
+                #    ax.set_ylim(30,ax.get_ylim()[1])
+                plt.tight_layout()
+                pdf.savefig()
+                plt.close(fig)
+            
+
+
 if __name__ == "__main__":
 
     #setup_interface("monthly_model_files")
     #monthly_ies_to_da("monthly_model_files_template")
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
+    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     #process_complex_target_output('daily_model_files_master_prior','monthly_model_files_template','seq_monthly_model_files_template',1 )
     #run_batch_seq_prior_monte_carlo()
     #setup_interface("daily_model_files")
     #run_complex_prior_mc('daily_model_files_template')
     #plot_prior_mc()
 
-    #compare_mf6_freyberg()
+    #compare_mf6_freyberg(num_workers=20)
+    plot_obs_v_sim2()
 
     exit()
 
