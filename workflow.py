@@ -9,6 +9,7 @@ import pandas as pd
 import platform
 import pyemu
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 import flopy
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -1082,13 +1083,21 @@ def plot_obs_v_sim2():
                 ax.set_title("B) sequential formulation {0}, realization {1}".format(label_dict[ogname], c_oe.index[ireal]),loc="left")
                 #if "gage" not in ogname:
                 #    ax.set_ylim(30,ax.get_ylim()[1])
+                mn = 1.0e+10
+                mx = -1.0e+10
+                for ax in axes.flatten():
+                    mn = min(ax.get_ylim()[0],mn)
+                    mx = max(ax.get_ylim()[1],mx)
+                for ax in axes.flatten():
+                    ax.set_ylim(mn,mx)
                 plt.tight_layout()
                 pdf.savefig()
                 plt.close(fig)
 
 
 def plot_domain():
-    sim = flopy.mf6.MFSimulation.load(sim_ws="template")
+    model_ws = "monthly_model_files_master_0"
+    sim = flopy.mf6.MFSimulation.load(sim_ws=model_ws)
     m = sim.get_model("freyberg6")
     wel_data = m.wel.stress_period_data.array[0]
     sfr_data = m.sfr.packagedata.array
@@ -1097,7 +1106,7 @@ def plot_domain():
     ib_cmap = plt.get_cmap("Greys_r")
     ib_cmap.set_bad(alpha=0.0)
 
-    pst = pyemu.Pst(os.path.join("template","freyberg6_run.pst"))
+    pst = pyemu.Pst(os.path.join(model_ws,"freyberg.pst"))
 
     fig,ax = plt.subplots(1,1,figsize=(8,8))
 
@@ -1149,9 +1158,10 @@ def plot_domain():
     ylim = ax.get_ylim()
 
     nz_obs = pst.observation_data.loc[pst.nnz_obs_names,:].copy()
-    nz_obs = nz_obs.loc[nz_obs.obsnme.str.startswith("trgw"),:]
-    nz_obs.loc[:, "i"] = nz_obs.obsnme.apply(lambda x: int(x.split('_')[2]))
-    nz_obs.loc[:, "j"] = nz_obs.obsnme.apply(lambda x: int(x.split('_')[3]))
+    nz_obs = nz_obs.loc[nz_obs.obsnme.str.contains("arrobs"),:]
+
+    nz_obs.loc[:, "i"] = nz_obs.i.apply(int)
+    nz_obs.loc[:, "j"] = nz_obs.j.apply(int)
     for ii,g in enumerate(nz_obs.obgnme.unique()):
         i = nz_obs.loc[nz_obs.obgnme == g, "i"][0]
         j = nz_obs.loc[nz_obs.obgnme == g, "j"][0]
@@ -1160,13 +1170,13 @@ def plot_domain():
         ax.scatter([x], [y], marker="^", c='r', s=100, zorder=10)
         ax.text(x + 150, y+150,"gw_{0}".format(ii+1),zorder=11, bbox=dict(facecolor='w', alpha=1,edgecolor="none",pad=1))
 
-    gw_fore = [f for f in forecasts if "trgw" in f][0]
-    i = int(gw_fore.split('_')[2])
-    j = int(gw_fore.split('_')[3])
+    gw_fore = [f for f in forecast if "arrobs" in f][0]
+    i = int(gw_fore.split('_')[3].split(":")[1])
+    j = int(gw_fore.split('_')[4].split(":")[1])
     x = m.modelgrid.xcellcenters[i, j]
     y = m.modelgrid.ycellcenters[i, j]
     ax.scatter([x], [y], marker="^", c='r', s=100, zorder=10)
-    ax.text(x + 150, y + 150, "gw_3", zorder=11,
+    ax.text(x + 150, y + 150, forecast_dict[gw_fore], zorder=11,
             bbox=dict(facecolor='w', alpha=1, edgecolor="none", pad=1))
 
     top = m.dis.top.array.reshape(ib.shape)
@@ -1178,11 +1188,143 @@ def plot_domain():
     ax.set_ylabel("y $ft$")
 
     ax.set_ylim(0,ylim[1])
-    spnspecs.graph_legend(ax=ax,bbox_to_anchor=(1.15, 0.9))
     plt.tight_layout()
-    plt.savefig(os.path.join(plt_dir,"domain.pdf"))
+    plt.savefig("domain.pdf")
     plt.close("all")
 
+
+def plot_s_vs_s():
+
+
+    # c_m_d = "daily_model_files_master_prior"
+    # c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    # cobs = c_pst.observation_data
+    # # cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
+    # cobs.loc[:, "time"] = cobs.time.apply(float)
+    # c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+
+    ognames = keep
+    ognames.extend(forecast)
+    label_dict = keep_dict
+    label_dict.update(forecast_dict)
+
+    # first rip thru all the dirs and load...
+    s_b_dict = {}
+    s_s_dict = {}
+    print("loading results...")
+    for ireal in range(100):
+        s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
+        s_s_m_d = "seq_monthly_model_files_master_{0}".format(ireal)
+        if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+            break
+        s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+        s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+        s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+                                index_col=0)
+
+        s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+        seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+        seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                           f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith(
+                               "freyberg")]
+
+        s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                          seq_oe_files_pr}
+        s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                          seq_oe_files_pt}
+
+        s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
+        s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
+        print(ireal)
+
+    ireals = list(s_s_dict.keys())
+    ireals.sort()
+    sbobs_org = s_b_pst.observation_data
+    print("plotting")
+    with PdfPages("s_vs_s.pdf") as pdf:
+        for ogname in ognames:
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            sgobs.sort_values(by="time", inplace=True)
+            figall,axesall = fig, axes = plt.subplots(1, 2, figsize=(8, 6))
+            for itime,oname in enumerate(sgobs.obsnme):
+                itime += 1
+
+                fig, axes = plt.subplots(1, 2, figsize=(8, 6))
+                for ireal in ireals:
+                    s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(ogname), :].copy()
+
+                    s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname,"obsval"]
+                    weight = sgobs.loc[oname,"weight"]
+                    print(ireal,oname,cval)
+                    ax = axes[0]
+                    ax.scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5)
+                    ax.scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
+                               alpha=0.5)
+                    axesall[0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
+                               color="0.5", alpha=0.5)
+                    axesall[0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
+                               color="b",
+                               alpha=0.5)
+                    seq_name = ogname
+                    if "arrobs" not in ogname:
+                        seq_name = ogname + "_time:10000.0"
+                    ax = axes[1]
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+                        ax.scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="0.5",
+                                   alpha=0.5)
+                        axesall[1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="0.5",
+                                   alpha=0.5)
+                    if itime in s_s_oe_dict_pt:
+                        oe = s_s_oe_dict_pt[itime]
+                        ax.scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="b",
+                                   alpha=0.5)
+                        axesall[1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="b",
+                                   alpha=0.5)
+
+                axes[0].set_title("A) batch",loc="left")
+                axes[1].set_title("A) sequential", loc="left")
+                fig.suptitle(oname+", weight:{0}".format(weight))
+                mn = 1.0e+20
+                mx = -1.0e+20
+                for ax in axes.flatten():
+                    mn = min(mn,ax.get_ylim()[0],ax.get_xlim()[0])
+                    mx = max(mx,ax.get_ylim()[1],ax.get_xlim()[1])
+                for ax in axes.flatten():
+                    ax.plot([mn,mx],[mn,mx],"k--")
+                    ax.set_xlim(mn,mx)
+                    ax.set_ylim(mn,mx)
+                    ax.set_aspect("equal")
+                    ax.set_ylabel("complex")
+                    ax.set_xlabel("simple")
+                plt.tight_layout()
+                pdf.savefig(fig)
+                plt.close(fig)
+
+            axes = axesall
+            axes[0].set_title("A) batch", loc="left")
+            axes[1].set_title("A) sequential", loc="left")
+            figall.suptitle(ogname + " all times")
+            mn = 1.0e+20
+            mx = -1.0e+20
+            for ax in axes.flatten():
+                mn = min(mn, ax.get_ylim()[0], ax.get_xlim()[0])
+                mx = max(mx, ax.get_ylim()[1], ax.get_xlim()[1])
+            for ax in axes.flatten():
+                ax.plot([mn, mx], [mn, mx], "k--")
+                ax.set_xlim(mn, mx)
+                ax.set_ylim(mn, mx)
+                ax.set_aspect("equal")
+                ax.set_ylabel("complex")
+                ax.set_xlabel("simple")
+            plt.tight_layout()
+            pdf.savefig(figall)
+            plt.close(figall)
 
 if __name__ == "__main__":
 
@@ -1197,8 +1339,9 @@ if __name__ == "__main__":
     #plot_prior_mc()
 
     #compare_mf6_freyberg(num_workers=20)
-    plot_obs_v_sim2()
-
+    #plot_obs_v_sim2()
+    #plot_domain()
+    plot_s_vs_s()
     exit()
 
     # invest()
