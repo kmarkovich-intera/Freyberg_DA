@@ -1282,11 +1282,13 @@ def plot_s_vs_s():
                 axes[0,0].set_title("A) batch prior",loc="left")
                 axes[1, 0].set_title("C) batch posterior", loc="left")
                 axes[0,1].set_title("B) sequential prior", loc="left")
-                axes[1, 1].set_title("D) sequential prior", loc="left")
+                axes[1, 1].set_title("D) sequential posterior", loc="left")
                 fig.suptitle(oname+", weight:{0}".format(weight))
                 mn = 1.0e+20
                 mx = -1.0e+20
                 for ax in axes.flatten():
+                    if ax.get_xlim()[0] == 0:
+                        continue
                     mn = min(mn,ax.get_ylim()[0],ax.get_xlim()[0])
                     mx = max(mx,ax.get_ylim()[1],ax.get_xlim()[1])
                 for ax in axes.flatten():
@@ -1304,11 +1306,13 @@ def plot_s_vs_s():
             axes[0, 0].set_title("A) batch prior", loc="left")
             axes[1, 0].set_title("C) batch posterior", loc="left")
             axes[0, 1].set_title("B) sequential prior", loc="left")
-            axes[1, 1].set_title("D) sequential prior", loc="left")
+            axes[1, 1].set_title("D) sequential posterior", loc="left")
             figall.suptitle(ogname + " all times")
             mn = 1.0e+20
             mx = -1.0e+20
             for ax in axes.flatten():
+                if ax.get_xlim()[0] == 0:
+                    continue
                 mn = min(mn, ax.get_ylim()[0], ax.get_xlim()[0])
                 mx = max(mx, ax.get_ylim()[1], ax.get_xlim()[1])
             for ax in axes.flatten():
