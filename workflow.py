@@ -1195,14 +1195,6 @@ def plot_domain():
 
 def plot_s_vs_s():
 
-
-    # c_m_d = "daily_model_files_master_prior"
-    # c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
-    # cobs = c_pst.observation_data
-    # # cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
-    # cobs.loc[:, "time"] = cobs.time.apply(float)
-    # c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
-
     ognames = keep
     ognames.extend(forecast)
     label_dict = keep_dict
@@ -1246,11 +1238,11 @@ def plot_s_vs_s():
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             sgobs.sort_values(by="time", inplace=True)
-            figall,axesall = fig, axes = plt.subplots(1, 2, figsize=(8, 6))
+            figall,axesall = fig, axes = plt.subplots(2, 2, figsize=(8, 8))
             for itime,oname in enumerate(sgobs.obsnme):
                 itime += 1
 
-                fig, axes = plt.subplots(1, 2, figsize=(8, 6))
+                fig, axes = plt.subplots(2, 2, figsize=(8, 6))
                 for ireal in ireals:
                     s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
                     sbobs = s_b_pst.observation_data
@@ -1261,34 +1253,36 @@ def plot_s_vs_s():
                     cval = sgobs.loc[oname,"obsval"]
                     weight = sgobs.loc[oname,"weight"]
                     print(ireal,oname,cval)
-                    ax = axes[0]
-                    ax.scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5)
-                    ax.scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
+
+                    axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5)
+                    axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
                                alpha=0.5)
-                    axesall[0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
+                    axesall[0,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
                                color="0.5", alpha=0.5)
-                    axesall[0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
+                    axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
                                color="b",
                                alpha=0.5)
                     seq_name = ogname
                     if "arrobs" not in ogname:
                         seq_name = ogname + "_time:10000.0"
-                    ax = axes[1]
+
                     if itime in s_s_oe_dict_pr:
                         oe = s_s_oe_dict_pr[itime]
-                        ax.scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="0.5",
+                        axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="0.5",
                                    alpha=0.5)
-                        axesall[1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="0.5",
+                        axesall[0,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="0.5",
                                    alpha=0.5)
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
-                        ax.scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="b",
+                        axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="b",
                                    alpha=0.5)
-                        axesall[1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="b",
+                        axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="b",
                                    alpha=0.5)
 
-                axes[0].set_title("A) batch",loc="left")
-                axes[1].set_title("A) sequential", loc="left")
+                axes[0,0].set_title("A) batch prior",loc="left")
+                axes[1, 0].set_title("C) batch posterior", loc="left")
+                axes[0,1].set_title("B) sequential prior", loc="left")
+                axes[1, 1].set_title("D) sequential prior", loc="left")
                 fig.suptitle(oname+", weight:{0}".format(weight))
                 mn = 1.0e+20
                 mx = -1.0e+20
@@ -1307,8 +1301,10 @@ def plot_s_vs_s():
                 plt.close(fig)
 
             axes = axesall
-            axes[0].set_title("A) batch", loc="left")
-            axes[1].set_title("A) sequential", loc="left")
+            axes[0, 0].set_title("A) batch prior", loc="left")
+            axes[1, 0].set_title("C) batch posterior", loc="left")
+            axes[0, 1].set_title("B) sequential prior", loc="left")
+            axes[1, 1].set_title("D) sequential prior", loc="left")
             figall.suptitle(ogname + " all times")
             mn = 1.0e+20
             mx = -1.0e+20
