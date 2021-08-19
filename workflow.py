@@ -32,7 +32,7 @@ if "windows" in platform.platform().lower():
 da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
-keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
+keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
 keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
 keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
@@ -662,7 +662,7 @@ def setup_interface(org_ws, num_reals=100):
 def monthly_ies_to_da(org_d):
     """convert the batch monthly model to sequential formulation"""
 
-    # load the existing 25-stress period model
+    # load the existing multi-stress period model
     org_sim = flopy.mf6.MFSimulation.load(sim_ws=org_d)
 
     # setup the destination dir
@@ -712,7 +712,7 @@ def monthly_ies_to_da(org_d):
 
     # write par cycle table for the perlen par (fixed)
     pers = org_sim.tdis.perioddata.array["perlen"]
-    pdf = pd.DataFrame(index=['perlen'], columns=np.arange(25))
+    pdf = pd.DataFrame(index=['perlen'], columns=np.arange(org_sim.tdis.nper.data))
     pdf.loc['perlen', :] = pers
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
@@ -940,13 +940,17 @@ def map_simple_bat_to_seq(b_d,s_d):
 
     """
 
+    org_sim = flopy.mf6.MFSimulation.load(sim_ws=b_d)
+
     # load the batch control file
     bpst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
     bobs = bpst.observation_data
 
     # work on the sequential obs names - yuck
-    seq_names = [o.split("_time")[0].replace("hds_usecol:","") if "hds_usecol" in o else o for o in bpst.nnz_obs_names ]
-    seq_names = set([o for o in seq_names if "arrobs" in o or "time:10000.0" in o ])
+    seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names ]
+    seq_names.extend([k for k in keep if "sfr" in k])
+    seq_names = set(seq_names)
+    assert len(seq_names) == len(keep)
 
     # load the sequential control file
     spst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
@@ -959,8 +963,8 @@ def map_simple_bat_to_seq(b_d,s_d):
     sobs = spst.observation_data.loc[seq_names]
 
     # build the weight and obs cycle tables
-    odf = pd.DataFrame(columns = np.arange(25),index=seq_names)
-    wdf = pd.DataFrame(columns=np.arange(25), index=seq_names)
+    odf = pd.DataFrame(columns = np.arange(org_sim.tdis.nper.data),index=seq_names)
+    wdf = pd.DataFrame(columns=np.arange(org_sim.tdis.nper.data), index=seq_names)
     wdf.loc[:,:] = 0.0
     for seq_name in seq_names:
 
@@ -1328,19 +1332,18 @@ def plot_s_vs_s():
 
 if __name__ == "__main__":
 
-    #setup_interface("monthly_model_files")
-    #monthly_ies_to_da("monthly_model_files_template")
+    setup_interface("monthly_model_files")
+    monthly_ies_to_da("monthly_model_files_template")
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
     #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-    #process_complex_target_output('daily_model_files_master_prior','monthly_model_files_template','seq_monthly_model_files_template',1 )
-    #run_batch_seq_prior_monte_carlo()
-    #setup_interface("daily_model_files")
-    #run_complex_prior_mc('daily_model_files_template')
-    #plot_prior_mc()
+    run_batch_seq_prior_monte_carlo()
+    setup_interface("daily_model_files")
+    run_complex_prior_mc('daily_model_files_template')
+    plot_prior_mc()
 
-    #compare_mf6_freyberg(num_workers=20)
-    #plot_obs_v_sim2()
-    #plot_domain()
+    compare_mf6_freyberg(num_workers=20)
+    plot_obs_v_sim2()
+    plot_domain()
     plot_s_vs_s()
     exit()
 
