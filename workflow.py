@@ -948,7 +948,7 @@ def map_simple_bat_to_seq(b_d,s_d):
 
     # work on the sequential obs names - yuck
     seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names ]
-    seq_names.extend([k for k in keep if "sfr" in k])
+    seq_names.extend([k+"_time:10000.0" for k in keep if "sfr" in k])
     seq_names = set(seq_names)
     assert len(seq_names) == len(keep)
 
@@ -1335,7 +1335,7 @@ if __name__ == "__main__":
     setup_interface("monthly_model_files")
     monthly_ies_to_da("monthly_model_files_template")
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
-    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     run_batch_seq_prior_monte_carlo()
     setup_interface("daily_model_files")
     run_complex_prior_mc('daily_model_files_template')
