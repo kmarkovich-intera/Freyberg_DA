@@ -948,7 +948,7 @@ def map_simple_bat_to_seq(b_d,s_d):
 
     # work on the sequential obs names - yuck
     seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names ]
-    seq_names.extend([k+"_time:10000.0" for k in keep if "sfr" in k])
+    seq_names = [n+"_time:10000.0" if "sfr" in n else n for n in seq_names]
     seq_names = set(seq_names)
     assert len(seq_names) == len(keep)
 
@@ -969,7 +969,8 @@ def map_simple_bat_to_seq(b_d,s_d):
     for seq_name in seq_names:
 
         # the batch obs info for this sequential obs name
-        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name),:].copy()
+        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:10000.0","")),:].copy()
+
         # sort by float time
         bsobs.loc[:,"time"] = bsobs.time.apply(float)
         bsobs.sort_values(by="time",inplace=True)
@@ -1332,14 +1333,15 @@ def plot_s_vs_s():
 
 if __name__ == "__main__":
 
-    setup_interface("monthly_model_files")
-    monthly_ies_to_da("monthly_model_files_template")
+    #setup_interface("monthly_model_files")
+    #monthly_ies_to_da("monthly_model_files_template")
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-    run_batch_seq_prior_monte_carlo()
-    setup_interface("daily_model_files")
-    run_complex_prior_mc('daily_model_files_template')
-    plot_prior_mc()
+    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    #exit()
+    #run_batch_seq_prior_monte_carlo()
+    #setup_interface("daily_model_files")
+    #run_complex_prior_mc('daily_model_files_template')
+    #plot_prior_mc()
 
     compare_mf6_freyberg(num_workers=20)
     plot_obs_v_sim2()
