@@ -128,7 +128,7 @@ def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag
         m_ies_dir = ies_t_d.replace("template","master") + tag
 
         pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
-                                     num_workers=4, master_dir=m_ies_dir, verbose=True)
+                                     num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
 
@@ -1403,11 +1403,9 @@ def plot_s_vs_s(tag1="",tag2="",summarize=False):
             pdf.savefig(figall)
             plt.close(figall)
 
-def phase_invest():
+def sync_phase():
     c_d = "daily_model_files"
     s_d = "monthly_model_files"
-
-
 
     t_c_d = c_d+"_test"
     t_s_d = s_d + "_test"
@@ -1424,23 +1422,23 @@ def phase_invest():
         rch_files = {int(f.split(".")[1].split("_")[-1]):np.loadtxt(os.path.join(d,f)) for f in rch_files}
         keys = list(rch_files.keys())
         keys.sort()
+        # calc the first sp recharge as the mean of the others
         new_first = np.zeros_like(rch_files[keys[0]])
         for key in keys[1:]:
             new_first += rch_files[key]
         new_first /= float(len(rch_files)-1)
         np.savetxt(os.path.join(d, "freyberg6.rch_recharge_1.txt"), new_first, fmt="%15.6E")
         rch_files[1] = new_first
-        #if "daily" in d:
-        #    for i in range(1,32):
-        #        np.savetxt(os.path.join(d, "freyberg6.rch_recharge_{0}.txt".format(i)), new_first, fmt="%15.6E")
-        #        rch_files[i] = new_first
-        #    c_rch_files = rch_files
         if "monthly" in d:
             s_rch_files = rch_files
+
+        # process the wel flux files
         wel_files = [f for f in os.listdir(d) if ".wel_stress_period_data" in f]
         wel_files = {int(f.split(".")[1].split("_")[-1]):pd.read_csv(os.path.join(d,f),header=None,names=["l","r","c","flux"]) for f in wel_files}
+        # no pumping in the first sp
         wel_files[1].loc[:,"flux"] = 0.0
         for sp,df in wel_files.items():
+            # uniform base pumping otherwise
             if sp != 1:
                 df.loc[:,"flux"] = -150.0
             df.to_csv(os.path.join(d,"freyberg6.wel_stress_period_data_{0}.txt".format(sp)),index=False,header=False,sep=" ")
@@ -1453,24 +1451,8 @@ def phase_invest():
 
     nrow,ncol = m.dis.nrow.data,m.dis.ncol.data
 
-    # sdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(s_sim.tdis.perioddata.array["perlen"]),unit='d')
-    # for iend in range(1,len(sdts)):
-    #     istart = iend - 1
-    #     end = sdts[iend]
-    #     start = sdts[istart]
-    #     avg_rch = 0
-    #     count_rch = 0
-    #     for dt,i in cdts_dict.items():
-    #         if dt >=start and dt < end:
-    #             #print(start,dt,end)
-    #
-    #             avg_rch += c_rch_files[cdts_dict[dt]+1].mean()
-    #             count_rch += 1
-    #     print(iend,count_rch)
-    #     arr = np.zeros((nrow,ncol)) + (avg_rch/float(count_rch))
-    #     np.savetxt(os.path.join(t_s_d,"freyberg6.rch_recharge_{0}.txt".format(iend)),arr,fmt='%15.6E')
+    # get the mean simple model rch rate for each complex model stress period
 
-    nrow, ncol = m.dis.nrow.data, m.dis.ncol.data
     sdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(s_sim.tdis.perioddata.array["perlen"]),unit='d')
     dts,vals = [],[]
     for iend in range(1,len(sdts)):
@@ -1484,12 +1466,15 @@ def phase_invest():
                 #arr = np.zeros((nrow,ncol)) + s_rch_files[iend].mean()
                 #np.savetxt(os.path.join(t_c_d, "freyberg6.rch_recharge_{0}.txt".format(i+1)), arr, fmt='%15.6E')
 
+    #smooth that blocky shit!
     df = pd.DataFrame({"org":vals},index=dts)
     df.loc[:,"roll_month"] = df.rolling(60,center=True,min_periods=1).mean()
+    # save the complex model daily rech arrays
     for i,val in enumerate(df.roll_month.values):
         arr = np.zeros((nrow, ncol)) + val
         np.savetxt(os.path.join(t_c_d,"freyberg6.rch_recharge_{0}.txt".format(i+1)),arr,fmt='%15.6E')
 
+    # run em
     pyemu.os_utils.run("mf6", cwd=t_c_d)
     pyemu.os_utils.run("mf6", cwd=t_s_d)
 
