@@ -68,11 +68,13 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag=""):
+def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag="",num_replicates=None):
     complex_dir = os.path.join('daily_model_files_master_prior')
     #bat_dir = os.path.join('monthly_model_files_template')
+    if num_replicates is None:
+        num_replicates = 100
     #seq_dir = os.path.join('seq_monthly_model_files_template')
-    for ireal in range(100):
+    for ireal in range(num_replicates):
 
         ies_t_d = map_complex_to_simple_bat(complex_dir,bat_dir,ireal)
         da_t_d = map_simple_bat_to_seq(ies_t_d,seq_dir)
@@ -1401,22 +1403,145 @@ def plot_s_vs_s(tag1="",tag2="",summarize=False):
             pdf.savefig(figall)
             plt.close(figall)
 
+def phase_invest():
+    c_d = "daily_model_files"
+    s_d = "monthly_model_files"
+
+
+
+    t_c_d = c_d+"_test"
+    t_s_d = s_d + "_test"
+
+    if os.path.exists(t_c_d):
+        shutil.rmtree(t_c_d)
+    shutil.copytree(c_d,t_c_d)
+    if os.path.exists(t_s_d):
+        shutil.rmtree(t_s_d)
+    shutil.copytree(s_d, t_s_d)
+
+    for d in [t_c_d,t_s_d]:
+        rch_files = [f for f in os.listdir(d) if "rch_recharge" in f]
+        rch_files = {int(f.split(".")[1].split("_")[-1]):np.loadtxt(os.path.join(d,f)) for f in rch_files}
+        keys = list(rch_files.keys())
+        keys.sort()
+        new_first = np.zeros_like(rch_files[keys[0]])
+        for key in keys[1:]:
+            new_first += rch_files[key]
+        new_first /= float(len(rch_files)-1)
+        np.savetxt(os.path.join(d, "freyberg6.rch_recharge_1.txt"), new_first, fmt="%15.6E")
+        rch_files[1] = new_first
+        #if "daily" in d:
+        #    for i in range(1,32):
+        #        np.savetxt(os.path.join(d, "freyberg6.rch_recharge_{0}.txt".format(i)), new_first, fmt="%15.6E")
+        #        rch_files[i] = new_first
+        #    c_rch_files = rch_files
+        if "monthly" in d:
+            s_rch_files = rch_files
+        wel_files = [f for f in os.listdir(d) if ".wel_stress_period_data" in f]
+        wel_files = {int(f.split(".")[1].split("_")[-1]):pd.read_csv(os.path.join(d,f),header=None,names=["l","r","c","flux"]) for f in wel_files}
+        wel_files[1].loc[:,"flux"] = 0.0
+        for sp,df in wel_files.items():
+            if sp != 1:
+                df.loc[:,"flux"] = -150.0
+            df.to_csv(os.path.join(d,"freyberg6.wel_stress_period_data_{0}.txt".format(sp)),index=False,header=False,sep=" ")
+
+    c_sim = flopy.mf6.MFSimulation.load(sim_ws=t_c_d)
+    cdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(c_sim.tdis.perioddata.array["perlen"]),unit="d")
+    cdts_dict = {dt:i for i,dt in enumerate(cdts)}
+    s_sim = flopy.mf6.MFSimulation.load(sim_ws=t_s_d)
+    m = c_sim.get_model("freyberg6")
+
+    nrow,ncol = m.dis.nrow.data,m.dis.ncol.data
+
+    # sdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(s_sim.tdis.perioddata.array["perlen"]),unit='d')
+    # for iend in range(1,len(sdts)):
+    #     istart = iend - 1
+    #     end = sdts[iend]
+    #     start = sdts[istart]
+    #     avg_rch = 0
+    #     count_rch = 0
+    #     for dt,i in cdts_dict.items():
+    #         if dt >=start and dt < end:
+    #             #print(start,dt,end)
+    #
+    #             avg_rch += c_rch_files[cdts_dict[dt]+1].mean()
+    #             count_rch += 1
+    #     print(iend,count_rch)
+    #     arr = np.zeros((nrow,ncol)) + (avg_rch/float(count_rch))
+    #     np.savetxt(os.path.join(t_s_d,"freyberg6.rch_recharge_{0}.txt".format(iend)),arr,fmt='%15.6E')
+
+    nrow, ncol = m.dis.nrow.data, m.dis.ncol.data
+    sdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(s_sim.tdis.perioddata.array["perlen"]),unit='d')
+    dts,vals = [],[]
+    for iend in range(1,len(sdts)):
+        istart = iend - 1
+        end = sdts[iend]
+        start = sdts[istart]
+        for dt,i in cdts_dict.items():
+            if dt >=start and dt < end:
+                dts.append(dt)
+                vals.append(s_rch_files[iend].mean())
+                #arr = np.zeros((nrow,ncol)) + s_rch_files[iend].mean()
+                #np.savetxt(os.path.join(t_c_d, "freyberg6.rch_recharge_{0}.txt".format(i+1)), arr, fmt='%15.6E')
+
+    df = pd.DataFrame({"org":vals},index=dts)
+    df.loc[:,"roll_month"] = df.rolling(60,center=True,min_periods=1).mean()
+    for i,val in enumerate(df.roll_month.values):
+        arr = np.zeros((nrow, ncol)) + val
+        np.savetxt(os.path.join(t_c_d,"freyberg6.rch_recharge_{0}.txt".format(i+1)),arr,fmt='%15.6E')
+
+    pyemu.os_utils.run("mf6", cwd=t_c_d)
+    pyemu.os_utils.run("mf6", cwd=t_s_d)
+
+    c_lst = flopy.utils.Mf6ListBudget(os.path.join(t_c_d,"freyberg6.lst"))
+    s_lst = flopy.utils.Mf6ListBudget(os.path.join(t_s_d, "freyberg6.lst"))
+
+    c_dfs = c_lst.get_dataframes(diff=True)
+    s_dfs = s_lst.get_dataframes(diff=True)
+    c_df = c_dfs[0]
+    c_df_cum = c_dfs[1]
+    s_df = s_dfs[0]
+    s_df_cum = s_dfs[1]
+
+    #s_df.index = s_df.index + pd.to_timedelta(15,unit="d")
+    with PdfPages("lst_compare.pdf") as pdf:
+        for col in c_df.columns:
+            fig,ax = plt.subplots(1,1,figsize=(8,8))
+            ax.plot(c_df.index.values,c_df.loc[:,col],color="c",label="complex")
+            ax.plot(s_df.index.values, s_df.loc[:, col], color="m",label="simple")
+            axt = plt.twinx(ax)
+            axt.plot(c_df_cum.index.values,c_df_cum.loc[:,col],"c--",label="complex")
+            axt.plot(s_df_cum.index.values, s_df_cum.loc[:, col],"m--",label="simple")
+            ax.set_title(col)
+            pdf.savefig()
+            plt.close(fig)
+    return t_c_d,t_s_d
+
+
+
 if __name__ == "__main__":
+
+    c_d,b_d = sync_phase()
     tag1 = ""
-    b_d = setup_interface("monthly_model_files",tag=tag1)
+    b_d = setup_interface(b_d,tag=tag1)
     s_d = monthly_ies_to_da(b_d)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     #exit()
-    #run_batch_seq_prior_monte_carlo()
-    #setup_interface("daily_model_files")
-    #run_complex_prior_mc('daily_model_files_template')
-    #plot_prior_mc()
+    run_batch_seq_prior_monte_carlo()
+    setup_interface(c_d)
+    run_complex_prior_mc('daily_model_files_template')
+    plot_prior_mc()
 
-    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=True,tag="_dropconflicts")
+    compare_mf6_freyberg(b_d, s_d, num_workers=30, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
+    plot_obs_v_sim2()
+    # plot_domain()
+    plot_s_vs_s(summarize=True)
+
+    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=True,tag="_dropconflicts",num_replicates=20)
     plot_obs_v_sim2(tag2="_dropconflicts")
     #plot_domain()
-    plot_s_vs_s(summarize=True)
+    plot_s_vs_s(summarize=True,tag2="_dropconflicts")
     exit()
 
     # invest()
