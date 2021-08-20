@@ -68,11 +68,11 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(num_workers=10):
+def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag=""):
+    complex_dir = os.path.join('daily_model_files_master_prior')
+    #bat_dir = os.path.join('monthly_model_files_template')
+    #seq_dir = os.path.join('seq_monthly_model_files_template')
     for ireal in range(100):
-        complex_dir = os.path.join('daily_model_files_master_prior')
-        bat_dir = os.path.join('monthly_model_files_template')
-        seq_dir = os.path.join('seq_monthly_model_files_template')
 
         ies_t_d = map_complex_to_simple_bat(complex_dir,bat_dir,ireal)
         da_t_d = map_simple_bat_to_seq(ies_t_d,seq_dir)
@@ -94,7 +94,7 @@ def compare_mf6_freyberg(num_workers=10):
         ies_pst.pestpp_options.pop("ies_localizer", None)
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
-        ies_pst.pestpp_options["ies_drop_conflicts"] = False
+        ies_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
         ies_pst.pestpp_options["ies_num_reals"] = 50
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
@@ -108,14 +108,14 @@ def compare_mf6_freyberg(num_workers=10):
         da_pst.pestpp_options.pop("ies_localizer", None)
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
-        da_pst.pestpp_options["ies_drop_conflicts"] = False
+        da_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
         da_pst.pestpp_options["ies_num_reals"] = 50
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
         # run da          
-        m_da_dir = da_t_d.replace("template","master")
+        m_da_dir = da_t_d.replace("template","master") + tag
 
         pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
                                      num_workers=num_workers, master_dir=m_da_dir, verbose=True)
@@ -123,7 +123,7 @@ def compare_mf6_freyberg(num_workers=10):
         shutil.rmtree(da_t_d)
 
         # run ies  
-        m_ies_dir = ies_t_d.replace("template","master")
+        m_ies_dir = ies_t_d.replace("template","master") + tag
 
         pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
                                      num_workers=4, master_dir=m_ies_dir, verbose=True)
@@ -433,7 +433,7 @@ def extract_state_obs():
     return fnames
 
 
-def setup_interface(org_ws, num_reals=100):
+def setup_interface(org_ws, num_reals=100,tag=""):
     """copied from auto_pest.py
 
     """
@@ -454,7 +454,7 @@ def setup_interface(org_ws, num_reals=100):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws + "_template"
+    template_ws = org_ws + "_template" + tag
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -657,6 +657,7 @@ def setup_interface(org_ws, num_reals=100):
 
     # write the updated pest control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
+    return pf.new_d
 
 
 def monthly_ies_to_da(org_d):
@@ -1004,7 +1005,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     return t_d
 
 
-def plot_obs_v_sim2():
+def plot_obs_v_sim2(tag1="",tag2=""):
     """plot the results for daily, monthly batch and monthly sequential
 
     """
@@ -1018,23 +1019,26 @@ def plot_obs_v_sim2():
 
     with PdfPages("obs_v_sim.pdf") as pdf:
         for ireal in range(100):
-            s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
-            s_s_m_d = "seq_monthly_model_files_master_{0}".format(ireal)
+            s_b_m_d = "monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
+            s_s_m_d = "seq_monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
             if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
                 break
-            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
-            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
-                                    index_col=0)
+            try:
+                s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+                s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+                s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+                                        index_col=0)
 
-            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
-            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
-            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                               f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith("freyberg")]
+                s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
+                seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+                seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                                   f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith("freyberg")]
 
-            s_s_oe_dict_pr = {int(f.split(".")[1]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files_pr}
-            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                              seq_oe_files_pt}
+                s_s_oe_dict_pr = {int(f.split(".")[1]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files_pr}
+                s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                                  seq_oe_files_pt}
+            except:
+                break
 
 
             ognames = keep
@@ -1071,7 +1075,7 @@ def plot_obs_v_sim2():
                     seq_name = ogname + "_time:10000.0"
                 print(seq_name)
                 for itime,time in enumerate(sgobs.time):
-                    itime += 1
+                    #itime += 1
 
 
                     if itime in s_s_oe_dict_pr:
@@ -1198,7 +1202,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s():
+def plot_s_vs_s(tag1="",tag2="",summarize=False):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1210,42 +1214,49 @@ def plot_s_vs_s():
     s_s_dict = {}
     print("loading results...")
     for ireal in range(100):
-        s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
-        s_s_m_d = "seq_monthly_model_files_master_{0}".format(ireal)
+        s_b_m_d = "monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
+        s_s_m_d = "seq_monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
-        s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
-        s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-        s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
-                                index_col=0)
+        try:
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+                                    index_col=0)
 
-        s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
-        seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
-        seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                           f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith(
-                               "freyberg")]
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith(
+                                   "freyberg")]
 
-        s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                          seq_oe_files_pr}
-        s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                          seq_oe_files_pt}
+            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
 
-        s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
-        s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
-        print(ireal)
+            s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
+            s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
+            print(ireal)
+        except:
+            break
+
+    if len(s_b_dict) == 0:
+        raise Exception()
 
     ireals = list(s_s_dict.keys())
     ireals.sort()
     sbobs_org = s_b_pst.observation_data
     print("plotting")
-    with PdfPages("s_vs_s.pdf") as pdf:
+    size,lw=3,0.5
+    with PdfPages("s_vs_s{0}{1}.pdf".format(tag1,tag2)) as pdf:
         for ogname in ognames:
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
+            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             sgobs.sort_values(by="time", inplace=True)
             figall,axesall = fig, axes = plt.subplots(2, 2, figsize=(8, 8))
             for itime,oname in enumerate(sgobs.obsnme):
-                itime += 1
 
                 fig, axes = plt.subplots(2, 2, figsize=(8, 6))
                 for ireal in ireals:
@@ -1259,30 +1270,88 @@ def plot_s_vs_s():
                     weight = sgobs.loc[oname,"weight"]
                     print(ireal,oname,cval)
 
-                    axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5)
-                    axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
-                               alpha=0.5)
-                    axesall[0,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
-                               color="0.5", alpha=0.5)
-                    axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
-                               color="b",
-                               alpha=0.5)
+                    if summarize:
+                        mn = s_b_oe_pr.loc[:, oname].mean()
+                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+                        axes[0, 0].scatter(mn, cval,
+                                           marker="o", color="0.5", alpha=0.5,s=size)
+                        axes[0, 0].plot([lq,uq], [cval,cval],
+                                           color="0.5", alpha=0.5,lw=lw)
+
+                        axesall[0, 0].scatter(mn, cval,
+                                           marker="o", color="0.5", alpha=0.5,s=size)
+                        axesall[0, 0].plot([lq, uq], [cval, cval],
+                                        color="0.5", alpha=0.5, lw=lw)
+
+                        mn = s_b_oe_pt.loc[:, oname].mean()
+                        lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
+                        axes[1, 0].scatter(mn, cval,
+                                           marker="o", color="b", alpha=0.5,s=size)
+                        axes[1, 0].plot([lq, uq], [cval, cval],
+                                        color="b", alpha=0.5, lw=lw)
+
+                        axesall[1, 0].scatter(mn, cval,
+                                              marker="o", color="b", alpha=0.5,s=size)
+                        axesall[1, 0].plot([lq, uq], [cval, cval],
+                                           color="b", alpha=0.5, lw=lw)
+
+
+                    else:
+                        axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5,s=size)
+                        axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
+                                   alpha=0.5,s=size)
+                        axesall[0,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
+                                   color="0.5", alpha=0.5,s=size)
+                        axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
+                                   color="b",alpha=0.5,s=size)
                     seq_name = ogname
                     if "arrobs" not in ogname:
                         seq_name = ogname + "_time:10000.0"
 
                     if itime in s_s_oe_dict_pr:
                         oe = s_s_oe_dict_pr[itime]
-                        axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="0.5",
-                                   alpha=0.5)
-                        axesall[0,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="0.5",
-                                   alpha=0.5)
+                        if summarize:
+                            mn = oe.loc[:, seq_name].mean()
+                            lq = oe.loc[:, seq_name].quantile(0.05)
+                            uq = oe.loc[:, seq_name].quantile(0.95)
+                            axes[0, 1].scatter(mn, cval,
+                                               marker="o", color="0.5", alpha=0.5,s=size)
+                            axes[0, 1].plot([lq, uq], [cval, cval],
+                                            color="0.5", alpha=0.5, lw=lw)
+
+                            axesall[0, 1].scatter(mn, cval,
+                                                  marker="o", color="0.5", alpha=0.5,s=size)
+                            axesall[0, 1].plot([lq, uq], [cval, cval],
+                                               color="0.5", alpha=0.5, lw=lw)
+
+                        else:
+                            axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                                       alpha=0.5,s=size)
+                            axesall[0,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                                       alpha=0.5,s=size)
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
-                        axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="+", color="b",
-                                   alpha=0.5)
-                        axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="+", color="b",
-                                   alpha=0.5)
+                        if summarize:
+                            mn = oe.loc[:, seq_name].mean()
+                            lq = oe.loc[:, seq_name].quantile(0.05)
+                            uq = oe.loc[:, seq_name].quantile(0.95)
+                            axes[1, 1].scatter(mn, cval,
+                                               marker="o", color="b", alpha=0.5,s=size)
+                            axes[1, 1].plot([lq, uq], [cval, cval],
+                                            color="b", alpha=0.5, lw=lw)
+
+                            axesall[1, 1].scatter(mn, cval,
+                                                  marker="o", color="b", alpha=0.5,s=size)
+                            axesall[1, 1].plot([lq, uq], [cval, cval],
+                                               color="b", alpha=0.5, lw=lw)
+                        else:
+
+                            axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size)
+                            axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size)
 
                 axes[0,0].set_title("A) batch prior",loc="left")
                 axes[1, 0].set_title("C) batch posterior", loc="left")
@@ -1332,21 +1401,21 @@ def plot_s_vs_s():
             plt.close(figall)
 
 if __name__ == "__main__":
-
-    #setup_interface("monthly_model_files")
-    #monthly_ies_to_da("monthly_model_files_template")
-    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior","monthly_model_files_template",1)
-    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    #tag1 = ""
+    #b_d = setup_interface("monthly_model_files",tag=tag1)
+    #s_d = monthly_ies_to_da(b_d)
+    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
+    #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     #exit()
     #run_batch_seq_prior_monte_carlo()
     #setup_interface("daily_model_files")
     #run_complex_prior_mc('daily_model_files_template')
     #plot_prior_mc()
 
-    compare_mf6_freyberg(num_workers=20)
-    plot_obs_v_sim2()
-    plot_domain()
-    plot_s_vs_s()
+    #compare_mf6_freyberg(b_d,s_d, num_workers=20,drop_conflicts=True,"_dropconflicts")
+    #plot_obs_v_sim2()
+    #plot_domain()
+    plot_s_vs_s(summarize=True)
     exit()
 
     # invest()
