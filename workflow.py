@@ -810,6 +810,7 @@ def monthly_ies_to_da(org_d):
     pst.control_data.noptmax = 0
     pst.write(os.path.join(t_d, "test.pst"), version=2)
     pyemu.os_utils.run("pestpp-da test.pst", cwd=t_d)
+    return t_d
 
 
 def run_batch_seq_prior_monte_carlo():
