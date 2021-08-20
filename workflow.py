@@ -657,7 +657,7 @@ def setup_interface(org_ws, num_reals=100,tag=""):
 
     # write the updated pest control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
-    return pf.new_d
+    return template_ws
 
 
 def monthly_ies_to_da(org_d):
@@ -1401,9 +1401,9 @@ def plot_s_vs_s(tag1="",tag2="",summarize=False):
             plt.close(figall)
 
 if __name__ == "__main__":
-    #tag1 = ""
-    #b_d = setup_interface("monthly_model_files",tag=tag1)
-    #s_d = monthly_ies_to_da(b_d)
+    tag1 = ""
+    b_d = setup_interface("monthly_model_files",tag=tag1)
+    s_d = monthly_ies_to_da(b_d)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     #exit()
@@ -1412,8 +1412,8 @@ if __name__ == "__main__":
     #run_complex_prior_mc('daily_model_files_template')
     #plot_prior_mc()
 
-    #compare_mf6_freyberg(b_d,s_d, num_workers=20,drop_conflicts=True,"_dropconflicts")
-    #plot_obs_v_sim2()
+    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=True,tag="_dropconflicts")
+    plot_obs_v_sim2(tag2="_dropconflicts")
     #plot_domain()
     plot_s_vs_s(summarize=True)
     exit()
