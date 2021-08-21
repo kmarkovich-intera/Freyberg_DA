@@ -614,6 +614,13 @@ def setup_interface(org_ws, num_reals=100):
     par = pst.parameter_data
     strt_pars = par.loc[par.parnme.str.contains("head_k"), "parnme"]
 
+    # set the first stress period to no pumping
+    first_wpar = "twel_mlt_0_inst:0_usecol:3"
+    assert first_wpar == set(pst.par_names)
+    pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
+    pf.pst.parameter_data.loc[first_wpar, "parval1"] = 1.0e-10
+    pf.pst.parameter_data.loc[first_wpar, "parlbnd"] = 1.0e-10
+
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
     # replace the ic strt pars with the control file values
@@ -1460,7 +1467,8 @@ def sync_phase():
         wel_files = [f for f in os.listdir(d) if ".wel_stress_period_data" in f]
         wel_files = {int(f.split(".")[1].split("_")[-1]):pd.read_csv(os.path.join(d,f),header=None,names=["l","r","c","flux"]) for f in wel_files}
         # no pumping in the first sp
-        wel_files[1].loc[:,"flux"] = 0.0
+        # now doing this in setup_pst
+        #wel_files[1].loc[:,"flux"] = 0.0
         for sp,df in wel_files.items():
             # uniform base pumping otherwise
             if sp != 1:
@@ -1536,10 +1544,10 @@ if __name__ == "__main__":
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
 
-    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     c_d = setup_interface("daily_model_files")
-    m_c_d = run_complex_prior_mc(c_d)
-    plot_prior_mc()
+    #m_c_d = run_complex_prior_mc(c_d)
+    #plot_prior_mc()
     exit()
     #
     compare_mf6_freyberg(num_workers=40, num_replicates=20)
