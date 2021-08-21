@@ -616,10 +616,11 @@ def setup_interface(org_ws, num_reals=100):
 
     # set the first stress period to no pumping
     first_wpar = "twel_mlt_0_inst:0_usecol:3"
-    assert first_wpar == set(pst.par_names)
-    pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
-    pf.pst.parameter_data.loc[first_wpar, "parval1"] = 1.0e-10
+    assert first_wpar in set(pst.par_names)
+    #pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
+    pf.pst.parameter_data.loc[first_wpar, "parval1"] = 5.0e-10
     pf.pst.parameter_data.loc[first_wpar, "parlbnd"] = 1.0e-10
+    pf.pst.parameter_data.loc[first_wpar, "parubnd"] = 1.0e-9
 
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
