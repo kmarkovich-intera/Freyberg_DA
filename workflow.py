@@ -68,13 +68,12 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
-                         drop_conflicts=False,tag="",num_replicates=None):
-    #complex_dir = os.path.join('daily_model_files_master_prior')
-    #bat_dir = os.path.join('monthly_model_files_template')
+def compare_mf6_freyberg(num_workers=10,num_replicates=None):
+    complex_dir = os.path.join('daily_model_files_master_prior')
+    bat_dir = os.path.join('monthly_model_files_template')
     if num_replicates is None:
         num_replicates = 100
-    #seq_dir = os.path.join('seq_monthly_model_files_template')
+    seq_dir = "seq_" + bat_dir
     for ireal in range(num_replicates):
 
         ies_t_d = map_complex_to_simple_bat(complex_dir,bat_dir,ireal)
@@ -97,7 +96,7 @@ def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
         ies_pst.pestpp_options.pop("ies_localizer", None)
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
-        ies_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
+        ies_pst.pestpp_options["ies_drop_conflicts"] = False
         ies_pst.pestpp_options["ies_num_reals"] = 100
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
@@ -111,14 +110,14 @@ def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
         da_pst.pestpp_options.pop("ies_localizer", None)
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
-        da_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
+        da_pst.pestpp_options["ies_drop_conflicts"] = False
         da_pst.pestpp_options["ies_num_reals"] = 100
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
         # run da          
-        m_da_dir = da_t_d.replace("template","master") + tag
+        m_da_dir = da_t_d.replace("template","master")
 
         pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
                                      num_workers=num_workers, master_dir=m_da_dir, verbose=True)
@@ -126,7 +125,7 @@ def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
         shutil.rmtree(da_t_d)
 
         # run ies  
-        m_ies_dir = ies_t_d.replace("template","master") + tag
+        m_ies_dir = ies_t_d.replace("template","master")
 
         pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
                                      num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
@@ -839,13 +838,13 @@ def run_batch_seq_prior_monte_carlo(b_d,s_d):
 
 
 
-def plot_prior_mc(c_m_d, s_b_m_d, s_s_m_d):
+def plot_prior_mc():
     """plot the prior monte carlo results for daily, monthly batch and monthly sequential
 
     """
-    #c_m_d = "daily_model_files_master_prior"
-    #s_b_m_d = "monthly_model_files_master_prior"
-    #s_s_m_d = "seq_monthly_model_files_master_prior"
+    c_m_d = "daily_model_files_master_prior"
+    s_b_m_d = "monthly_model_files_master_prior"
+    s_s_m_d = "seq_monthly_model_files_master_prior"
 
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     obs = c_pst.observation_data
@@ -1511,27 +1510,24 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    sync_phase()
+    #sync_phase()
     b_d = setup_interface("monthly_model_files")
     s_d = monthly_ies_to_da(b_d)
+    exit()
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
+
     m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     c_d = setup_interface("daily_model_files")
-    # m_c_d = run_complex_prior_mc(c_d)
-    # plot_prior_mc(m_c_d,m_b_d, m_s_d)
+    m_c_d = run_complex_prior_mc(c_d)
+    plot_prior_mc()
+    exit()
     #
-    # compare_mf6_freyberg(m_c_d, b_d, s_d, num_workers=40, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
+    compare_mf6_freyberg(num_workers=40, num_replicates=20)
     plot_obs_v_sim2()
     # plot_domain()
     plot_s_vs_s(summarize=True)
-    exit()
-    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=False,tag="",num_replicates=20)
-    plot_obs_v_sim2(tag2="_dropconflicts")
-    #plot_domain()
-    plot_s_vs_s(summarize=True,tag2="_dropconflicts")
-    exit()
 
     # invest()
     # exit()
