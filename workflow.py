@@ -617,7 +617,7 @@ def setup_interface(org_ws, num_reals=100):
     # set the first stress period to no pumping
     first_wpar = "twel_mlt_0_inst:0_usecol:3"
     assert first_wpar in set(pst.par_names)
-    #pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
+    pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
     pf.pst.parameter_data.loc[first_wpar, "parval1"] = 5.0e-10
     pf.pst.parameter_data.loc[first_wpar, "parlbnd"] = 1.0e-10
     pf.pst.parameter_data.loc[first_wpar, "parubnd"] = 1.0e-9
@@ -790,7 +790,7 @@ def monthly_ies_to_da(org_d):
             # set the cycle
             pst.model_input_data.iloc[i, 2] = cy
             # point all template files to write the same input file (the first stress period file)
-            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "1")
+            pst.model_input_data.iloc[i, 1] = pst.model_input_data.iloc[i, 1].replace(str(cy), "0")
         # spatially constant but temporally varying
         elif 'rch_recharge' in pst.model_input_data.iloc[i, 0] and "cn" in pst.model_input_data.iloc[i, 0]:
             cy = int(pst.model_input_data.iloc[i, 0].split('_')[2])
@@ -823,6 +823,7 @@ def monthly_ies_to_da(org_d):
             pst.parameter_data.loc[pname, "cycle"] = cy - 1
 
     pst.control_data.noptmax = 3
+    pst.pestpp_options["da_verbose_level"] = 3
     pst.write(os.path.join(t_d, "freyberg.pst"), version=2)
 
     # fill any missing pars in the prior ensemble with ctl file values (esp the perlen par)
@@ -1538,7 +1539,8 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    sync_phase()
+    #sync_phase()
+
     b_d = setup_interface("monthly_model_files")
     s_d = monthly_ies_to_da(b_d)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
