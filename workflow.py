@@ -98,7 +98,7 @@ def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
         ies_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
-        ies_pst.pestpp_options["ies_num_reals"] = 50
+        ies_pst.pestpp_options["ies_num_reals"] = 100
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
@@ -112,7 +112,7 @@ def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
         da_pst.pestpp_options["ies_drop_conflicts"] = drop_conflicts
-        da_pst.pestpp_options["ies_num_reals"] = 50
+        da_pst.pestpp_options["ies_num_reals"] = 100
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
@@ -825,14 +825,14 @@ def run_batch_seq_prior_monte_carlo(b_d,s_d):
     pst.control_data.noptmax = -1
     pst.write(os.path.join(s_d,"freyberg.pst"),version=2)
     m_s_d = s_d.replace("template", "master_prior")
-    pyemu.os_utils.start_workers(s_d, "pestpp-da", "freyberg.pst", num_workers=10,
+    pyemu.os_utils.start_workers(s_d, "pestpp-da", "freyberg.pst", num_workers=40,
                                  master_dir=m_s_d)
 
     pst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
     pst.control_data.noptmax = -1
     pst.write(os.path.join(b_d, "freyberg.pst"),version=2)
     m_b_d = b_d.replace("template", "master_prior")
-    pyemu.os_utils.start_workers(b_d, "pestpp-ies", "freyberg.pst", num_workers=10,
+    pyemu.os_utils.start_workers(b_d, "pestpp-ies", "freyberg.pst", num_workers=40,
                                  master_dir=m_b_d)
 
     return m_b_d,m_s_d
@@ -1013,11 +1013,11 @@ def map_simple_bat_to_seq(b_d,s_d):
     return t_d
 
 
-def plot_obs_v_sim2(tag1="",tag2=""):
+def plot_obs_v_sim2(c_m_d,b_d_base,s_d_base,tag1="",tag2=""):
     """plot the results for daily, monthly batch and monthly sequential
 
     """
-    c_m_d = "daily_model_files_master_prior"
+    #c_m_d = "daily_model_files_master_prior"
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     cobs = c_pst.observation_data
     #cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
@@ -1025,10 +1025,10 @@ def plot_obs_v_sim2(tag1="",tag2=""):
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
 
 
-    with PdfPages("obs_v_sim.pdf") as pdf:
+    with PdfPages("obs_v_sim{0}{1}.pdf".format(tag1,tag2)) as pdf:
         for ireal in range(100):
-            s_b_m_d = "monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
-            s_s_m_d = "seq_monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
+            s_b_m_d = "{0}_{1}{2}{3}".format(b_d_base,ireal,tag1,tag2)
+            s_s_m_d = "{0}_{1}{2}{3}".format(s_d_base,ireal,tag1,tag2)
             if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
                 break
             try:
@@ -1210,7 +1210,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(tag1="",tag2="",summarize=False):
+def plot_s_vs_s(b_d_base,s_d_base,tag1="",tag2="",summarize=False):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1222,8 +1222,8 @@ def plot_s_vs_s(tag1="",tag2="",summarize=False):
     s_s_dict = {}
     print("loading results...")
     for ireal in range(100):
-        s_b_m_d = "monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
-        s_s_m_d = "seq_monthly_model_files_master_{0}{1}{2}".format(ireal,tag1,tag2)
+        s_b_m_d = "{0}_{1}{2}{3}".format(b_d_base,ireal,tag1,tag2)
+        s_s_m_d = "{0}_{1}{2}{3}".format(s_d_base,ireal,tag1,tag2)
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
         try:
@@ -1511,24 +1511,24 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    c_d,b_d = sync_phase()
-    tag1 = ""
-    b_d = setup_interface(b_d,tag=tag1)
-    s_d = monthly_ies_to_da(b_d)
-    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
-    #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
-    #exit()
-    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    setup_interface(c_d)
-    m_c_d = run_complex_prior_mc(c_d)
-    plot_prior_mc(m_c_d,m_b_d, m_s_d)
-
-    compare_mf6_freyberg(m_c_d, b_d, s_d, num_workers=30, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
-    plot_obs_v_sim2()
+    # c_d,b_d = sync_phase()
+    # tag1 = ""
+    # b_d = setup_interface(b_d,tag=tag1)
+    # s_d = monthly_ies_to_da(b_d)
+    # #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
+    # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
+    # #exit()
+    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    # c_d = setup_interface(c_d)
+    # m_c_d = run_complex_prior_mc(c_d)
+    # plot_prior_mc(m_c_d,m_b_d, m_s_d)
+    #
+    # compare_mf6_freyberg(m_c_d, b_d, s_d, num_workers=40, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
+    plot_obs_v_sim2("daily_model_files_test_master_prior","monthly_model_files_test_master","seq_monthly_model_file_test_master",tag2="_dropconflicts")
     # plot_domain()
-    plot_s_vs_s(summarize=True)
-
-    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=True,tag="_dropconflicts",num_replicates=20)
+    plot_s_vs_s("monthly_model_files_test_master","seq_monthly_model_files_test_master",summarize=True,tag2="_dropconflicts")
+    exit()
+    compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=False,tag="",num_replicates=20)
     plot_obs_v_sim2(tag2="_dropconflicts")
     #plot_domain()
     plot_s_vs_s(summarize=True,tag2="_dropconflicts")
