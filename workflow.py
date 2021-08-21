@@ -438,7 +438,7 @@ def extract_state_obs():
     return fnames
 
 
-def setup_interface(org_ws, num_reals=100,tag=""):
+def setup_interface(org_ws, num_reals=100):
     """copied from auto_pest.py
 
     """
@@ -459,7 +459,7 @@ def setup_interface(org_ws, num_reals=100,tag=""):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws + "_template" + tag
+    template_ws = org_ws + "_template"
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -1013,11 +1013,11 @@ def map_simple_bat_to_seq(b_d,s_d):
     return t_d
 
 
-def plot_obs_v_sim2(c_m_d,b_d_base,s_d_base,tag1="",tag2=""):
+def plot_obs_v_sim2():
     """plot the results for daily, monthly batch and monthly sequential
 
     """
-    #c_m_d = "daily_model_files_master_prior"
+    c_m_d = "daily_model_files_master_prior"
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     cobs = c_pst.observation_data
     #cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
@@ -1025,11 +1025,11 @@ def plot_obs_v_sim2(c_m_d,b_d_base,s_d_base,tag1="",tag2=""):
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
 
 
-    with PdfPages("obs_v_sim{0}{1}.pdf".format(tag1,tag2)) as pdf:
+    with PdfPages("obs_v_sim.pdf") as pdf:
         for ireal in range(100):
-            s_b_m_d = "{0}_{1}{2}{3}".format(b_d_base,ireal,tag1,tag2)
-            s_s_m_d = "{0}_{1}{2}{3}".format(s_d_base,ireal,tag1,tag2)
-            if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+            s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
+            s_s_m_d = "seq_" + s_b_m_d
+            if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
                 break
             try:
                 s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
@@ -1210,7 +1210,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(b_d_base,s_d_base,tag1="",tag2="",summarize=False):
+def plot_s_vs_s(summarize=False):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1222,8 +1222,8 @@ def plot_s_vs_s(b_d_base,s_d_base,tag1="",tag2="",summarize=False):
     s_s_dict = {}
     print("loading results...")
     for ireal in range(100):
-        s_b_m_d = "{0}_{1}{2}{3}".format(b_d_base,ireal,tag1,tag2)
-        s_s_m_d = "{0}_{1}{2}{3}".format(s_d_base,ireal,tag1,tag2)
+        s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
+        s_s_m_d = "seq_" + s_b_m_d
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
         try:
@@ -1257,7 +1257,7 @@ def plot_s_vs_s(b_d_base,s_d_base,tag1="",tag2="",summarize=False):
     sbobs_org = s_b_pst.observation_data
     print("plotting")
     size,lw=3,0.5
-    with PdfPages("s_vs_s{0}{1}.pdf".format(tag1,tag2)) as pdf:
+    with PdfPages("s_vs_s.pdf") as pdf:
         for ogname in ognames:
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
             sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
@@ -1409,11 +1409,11 @@ def plot_s_vs_s(b_d_base,s_d_base,tag1="",tag2="",summarize=False):
             plt.close(figall)
 
 def sync_phase():
-    c_d = "daily_model_files"
-    s_d = "monthly_model_files"
+    c_d = "daily_model_files_org"
+    s_d = "monthly_model_files_org"
 
-    t_c_d = c_d+"_test"
-    t_s_d = s_d + "_test"
+    t_c_d = c_d.replace("_org","")
+    t_s_d = s_d.replace("_org","")
 
     if os.path.exists(t_c_d):
         shutil.rmtree(t_c_d)
@@ -1511,22 +1511,21 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    # c_d,b_d = sync_phase()
-    # tag1 = ""
-    # b_d = setup_interface(b_d,tag=tag1)
-    # s_d = monthly_ies_to_da(b_d)
-    # #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
+    sync_phase()
+    b_d = setup_interface("monthly_model_files")
+    s_d = monthly_ies_to_da(b_d)
+    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
-    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    # c_d = setup_interface(c_d)
+    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
     # plot_prior_mc(m_c_d,m_b_d, m_s_d)
     #
     # compare_mf6_freyberg(m_c_d, b_d, s_d, num_workers=40, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
-    plot_obs_v_sim2("daily_model_files_test_master_prior","monthly_model_files_test_master","seq_monthly_model_file_test_master",tag2="_dropconflicts")
+    plot_obs_v_sim2()
     # plot_domain()
-    plot_s_vs_s("monthly_model_files_test_master","seq_monthly_model_files_test_master",summarize=True,tag2="_dropconflicts")
+    plot_s_vs_s(summarize=True)
     exit()
     compare_mf6_freyberg(b_d,s_d, num_workers=30,drop_conflicts=False,tag="",num_replicates=20)
     plot_obs_v_sim2(tag2="_dropconflicts")
