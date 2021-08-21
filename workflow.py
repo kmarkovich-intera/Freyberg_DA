@@ -466,6 +466,13 @@ def setup_interface(org_ws, num_reals=100):
                              longnames=True, spatial_reference=m.modelgrid,
                              zero_based=False, start_datetime="1-1-2018")
 
+    inc,cum = test_process_lst_file(template_ws)
+    df = pf.add_observations("inc.csv",index_cols=["time"],use_cols=inc.columns.tolist(),ofile_sep=",",prefix="inc",obsgp="inc")
+    df = pf.add_observations("cum.csv", index_cols=["time"], use_cols=cum.columns.tolist(), ofile_sep=",", prefix="cum",
+                             obsgp="cum")
+    pf.add_py_function("workflow.py","process_lst_file()",is_pre_cmd=False)
+
+
     # add observations from the sfr observation output file
     df = pd.read_csv(os.path.join(template_ws, "sfr.csv"), index_col=0)
     pf.add_observations("sfr.csv", insfile="sfr.csv.ins", index_cols="time",
@@ -664,6 +671,25 @@ def setup_interface(org_ws, num_reals=100):
     return template_ws
 
 
+def process_lst_file():
+    lst = flopy.utils.Mf6ListBudget("freyberg6.lst")
+    inc,cum = lst.get_dataframes(start_datetime=None,diff=True)
+    inc.columns = inc.columns.map(str.lower)
+    inc.index.name = "time"
+    cum.columns = cum.columns.map(str.lower)
+    cum.index.name = "time"
+    inc.to_csv("inc.csv")
+    cum.to_csv("cum.csv")
+    return inc,cum
+
+def test_process_lst_file(d):
+    cwd = os.getcwd()
+    os.chdir(d)
+    inc,cum = process_lst_file()
+    os.chdir(cwd)
+    return inc,cum
+
+
 def monthly_ies_to_da(org_d):
     """convert the batch monthly model to sequential formulation"""
 
@@ -731,23 +757,17 @@ def monthly_ies_to_da(org_d):
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
-    # fix the sfr instruction file - only need one output time
+    # fix the sfr and list instruction files - only need one output time
     fname = 'sfr.csv'
-    fname_ins = fname + ".ins"
-    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+    ins_names = ["sfr.csv.ins","inc.csv.ins","cum.csv.ins"]
+    for ins_name in ins_names:
+        pst.drop_observations(os.path.join(t_d, ins_name), '.')
 
-    ins_lines = open(os.path.join(t_d, fname_ins), 'r').readlines()
-    with open(os.path.join(t_d, fname_ins), 'w') as f:
-        for line in ins_lines[:3]:
-            f.write(line)
-
-    new_ins_files = [os.path.join(t_d, fname_ins)]
-    new_out = [os.path.join(t_d, "sfr.csv")]
-    new_ins_cycle = [-1]
-
-    # add sfr obs
-    for ins_file in new_ins_files:
-        pst.add_observations(ins_file, pst_path=".")
+        ins_lines = open(os.path.join(t_d, ins_name), 'r').readlines()
+        with open(os.path.join(t_d, ins_name), 'w') as f:
+            for line in ins_lines[:3]:
+                f.write(line)
+        pst.add_observations(os.path.join(t_d, ins_name), pst_path=".")
 
     # now set cycles
     pst.observation_data.loc[:, 'cycle'] = -1
@@ -1507,13 +1527,11 @@ def sync_phase():
     return t_c_d,t_s_d
 
 
-
 if __name__ == "__main__":
 
-    #sync_phase()
+    sync_phase()
     b_d = setup_interface("monthly_model_files")
     s_d = monthly_ies_to_da(b_d)
-    exit()
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
