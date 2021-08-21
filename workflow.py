@@ -68,8 +68,9 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag="",num_replicates=None):
-    complex_dir = os.path.join('daily_model_files_master_prior')
+def compare_mf6_freyberg(complex_dir, bat_dir,seq_dir,num_workers=10,
+                         drop_conflicts=False,tag="",num_replicates=None):
+    #complex_dir = os.path.join('daily_model_files_master_prior')
     #bat_dir = os.path.join('monthly_model_files_template')
     if num_replicates is None:
         num_replicates = 100
@@ -134,9 +135,11 @@ def compare_mf6_freyberg(bat_dir,seq_dir,num_workers=10,drop_conflicts=False,tag
 
 
 
-def run_complex_prior_mc(c_t):
-    pyemu.os_utils.start_workers(c_t, "pestpp-ies", "freyberg.pst", num_workers=10, worker_root=".",
-                                 master_dir=c_t.replace("template", "master_prior"))
+def run_complex_prior_mc(c_d):
+    m_c_d = c_d.replace("template", "master_prior")
+    pyemu.os_utils.start_workers(c_d, "pestpp-ies", "freyberg.pst", num_workers=10, worker_root=".",
+                                 master_dir=m_c_d)
+    return m_c_d
 
 
 def plot_phi_seq_bat():
@@ -815,32 +818,34 @@ def monthly_ies_to_da(org_d):
     return t_d
 
 
-def run_batch_seq_prior_monte_carlo():
+def run_batch_seq_prior_monte_carlo(b_d,s_d):
     """run prior monte carlo for the batch and seq monthly models
     """
-    t_d = "seq_monthly_model_files_template"
-    pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    pst = pyemu.Pst(os.path.join(s_d,"freyberg.pst"))
     pst.control_data.noptmax = -1
-    pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
-    pyemu.os_utils.start_workers(t_d, "pestpp-da", "freyberg.pst", num_workers=10,
-                                 master_dir=t_d.replace("template", "master_prior"))
+    pst.write(os.path.join(s_d,"freyberg.pst"),version=2)
+    m_s_d = s_d.replace("template", "master_prior")
+    pyemu.os_utils.start_workers(s_d, "pestpp-da", "freyberg.pst", num_workers=10,
+                                 master_dir=m_s_d)
 
-    t_d = "monthly_model_files_template"
-    pst = pyemu.Pst(os.path.join(t_d, "freyberg.pst"))
+    pst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
     pst.control_data.noptmax = -1
-    pst.write(os.path.join(t_d, "freyberg.pst"),version=2)
-    pyemu.os_utils.start_workers(t_d, "pestpp-ies", "freyberg.pst", num_workers=10,
-                                 master_dir=t_d.replace("template", "master_prior"))
+    pst.write(os.path.join(b_d, "freyberg.pst"),version=2)
+    m_b_d = b_d.replace("template", "master_prior")
+    pyemu.os_utils.start_workers(b_d, "pestpp-ies", "freyberg.pst", num_workers=10,
+                                 master_dir=m_b_d)
+
+    return m_b_d,m_s_d
 
 
 
-def plot_prior_mc():
+def plot_prior_mc(c_m_d, s_b_m_d, s_s_m_d):
     """plot the prior monte carlo results for daily, monthly batch and monthly sequential
 
     """
-    c_m_d = "daily_model_files_master_prior"
-    s_b_m_d = "monthly_model_files_master_prior"
-    s_s_m_d = "seq_monthly_model_files_master_prior"
+    #c_m_d = "daily_model_files_master_prior"
+    #s_b_m_d = "monthly_model_files_master_prior"
+    #s_s_m_d = "seq_monthly_model_files_master_prior"
 
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     obs = c_pst.observation_data
@@ -1513,12 +1518,12 @@ if __name__ == "__main__":
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     #exit()
-    run_batch_seq_prior_monte_carlo()
+    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     setup_interface(c_d)
-    run_complex_prior_mc('daily_model_files_template')
-    plot_prior_mc()
+    m_c_d = run_complex_prior_mc(c_d)
+    plot_prior_mc(m_c_d,m_b_d, m_s_d)
 
-    compare_mf6_freyberg(b_d, s_d, num_workers=30, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
+    compare_mf6_freyberg(m_c_d, b_d, s_d, num_workers=30, drop_conflicts=True, tag="_dropconflicts", num_replicates=20)
     plot_obs_v_sim2()
     # plot_domain()
     plot_s_vs_s(summarize=True)
