@@ -1254,7 +1254,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(summarize=False):
+def plot_s_vs_s(summarize=False,subdir="."):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1266,9 +1266,8 @@ def plot_s_vs_s(summarize=False):
     s_s_dict = {}
     print("loading results...")
     for ireal in range(100):
-
-        s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
-        s_s_m_d = "seq_" + s_b_m_d
+        s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
         try:
@@ -1305,7 +1304,7 @@ def plot_s_vs_s(summarize=False):
     sbobs_org = s_b_pst.observation_data
     print("plotting")
     size,lw=3,0.5
-    with PdfPages("s_vs_s.pdf") as pdf:
+    with PdfPages(os.path.join(subdir,"s_vs_s.pdf")) as pdf:
         for ogname in ognames:
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
             sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
@@ -1390,6 +1389,27 @@ def plot_s_vs_s(summarize=False):
                                        alpha=0.5,s=size)
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
+                        if summarize:
+                            mn = oe.loc[:, seq_name].mean()
+                            lq = oe.loc[:, seq_name].quantile(0.05)
+                            uq = oe.loc[:, seq_name].quantile(0.95)
+                            axes[1, 1].scatter(mn, cval,
+                                               marker="o", color="b", alpha=0.5,s=size)
+                            axes[1, 1].plot([lq, uq], [cval, cval],
+                                            color="b", alpha=0.5, lw=lw)
+
+                            axesall[1, 1].scatter(mn, cval,
+                                                  marker="o", color="b", alpha=0.5,s=size)
+                            axesall[1, 1].plot([lq, uq], [cval, cval],
+                                               color="b", alpha=0.5, lw=lw)
+                        else:
+
+                            axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size)
+                            axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size)
+                    elif itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
                         if summarize:
                             mn = oe.loc[:, seq_name].mean()
                             lq = oe.loc[:, seq_name].quantile(0.05)
