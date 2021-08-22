@@ -1415,26 +1415,26 @@ def plot_s_vs_s(summarize=False,subdir="."):
                             lq = oe.loc[:, seq_name].quantile(0.05)
                             uq = oe.loc[:, seq_name].quantile(0.95)
                             axes[1, 1].scatter(mn, cval,
-                                               marker="o", color="b", alpha=0.5,s=size)
+                                               marker="o", color="0.5", alpha=0.5,s=size)
                             axes[1, 1].plot([lq, uq], [cval, cval],
-                                            color="b", alpha=0.5, lw=lw)
+                                            color="0.5", alpha=0.5, lw=lw)
 
                             axesall[1, 1].scatter(mn, cval,
-                                                  marker="o", color="b", alpha=0.5,s=size)
+                                                  marker="o", color="0.5", alpha=0.5,s=size)
                             axesall[1, 1].plot([lq, uq], [cval, cval],
-                                               color="b", alpha=0.5, lw=lw)
+                                               color="0.5", alpha=0.5, lw=lw)
                         else:
 
-                            axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
+                            axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
                                        alpha=0.5,s=size)
-                            axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
+                            axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
                                        alpha=0.5,s=size)
 
                 axes[0,0].set_title("A) batch prior",loc="left")
                 axes[1, 0].set_title("C) batch posterior", loc="left")
                 axes[0,1].set_title("B) sequential prior", loc="left")
                 axes[1, 1].set_title("D) sequential posterior", loc="left")
-                fig.suptitle(oname+", weight:{0}".format(weight))
+                fig.suptitle(oname+", weight:{0}, cycle:{1}".format(weight,itime))
                 mn = 1.0e+20
                 mx = -1.0e+20
                 for ax in axes.flatten():
@@ -1594,10 +1594,10 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=40, num_replicates=50)
-    plot_obs_v_sim2()
+    #compare_mf6_freyberg(num_workers=40, num_replicates=50)
+    #plot_obs_v_sim2()
     #plot_domain()
-    plot_s_vs_s(summarize=True)
+    plot_s_vs_s(summarize=True,subdir="naive_20rep_100real")
 
     # invest()
     exit()
