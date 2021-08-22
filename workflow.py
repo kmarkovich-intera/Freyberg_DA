@@ -69,11 +69,9 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(num_workers=10,num_replicates=None):
+def compare_mf6_freyberg(num_workers=10,,num_reals=100,num_replicates=100):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
-    if num_replicates is None:
-        num_replicates = 100
     seq_dir = "seq_" + bat_dir
     for ireal in range(num_replicates):
 
@@ -98,7 +96,7 @@ def compare_mf6_freyberg(num_workers=10,num_replicates=None):
         ies_pst.pestpp_options["ies_autoadaloc"] = False
         ies_pst.pestpp_options["ies_save_lambda_en"] = False
         ies_pst.pestpp_options["ies_drop_conflicts"] = False
-        ies_pst.pestpp_options["ies_num_reals"] = 100
+        ies_pst.pestpp_options["ies_num_reals"] = num_reals
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
@@ -112,7 +110,7 @@ def compare_mf6_freyberg(num_workers=10,num_replicates=None):
         da_pst.pestpp_options["ies_autoadaloc"] = False
         da_pst.pestpp_options["ies_save_lambda_en"] = False
         da_pst.pestpp_options["ies_drop_conflicts"] = False
-        da_pst.pestpp_options["ies_num_reals"] = 100
+        da_pst.pestpp_options["ies_num_reals"] = num_reals
         da_pst.pestpp_options["ies_use_mda"] = False
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
@@ -1171,7 +1169,7 @@ def plot_domain():
 
     pst = pyemu.Pst(os.path.join(model_ws,"freyberg.pst"))
 
-    fig,ax = plt.subplots(1,1,figsize=(8,8))
+    fig,ax = plt.subplots(1,1,figsize=(6,5))
 
     ib = np.ma.masked_where(ib!=0,ib)
 
@@ -1268,6 +1266,7 @@ def plot_s_vs_s(summarize=False):
     s_s_dict = {}
     print("loading results...")
     for ireal in range(100):
+
         s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
         s_s_m_d = "seq_" + s_b_m_d
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
@@ -1295,8 +1294,11 @@ def plot_s_vs_s(summarize=False):
         except:
             break
 
+
+
     if len(s_b_dict) == 0:
         raise Exception()
+
 
     ireals = list(s_s_dict.keys())
     ireals.sort()
@@ -1360,6 +1362,7 @@ def plot_s_vs_s(summarize=False):
                                    color="0.5", alpha=0.5,s=size)
                         axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
                                    color="b",alpha=0.5,s=size)
+
                     seq_name = ogname
                     if "arrobs" not in ogname:
                         seq_name = ogname + "_time:10000.0"
@@ -1568,13 +1571,13 @@ if __name__ == "__main__":
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #c_d = setup_interface("daily_model_files")
     #m_c_d = run_complex_prior_mc(c_d)
-    plot_prior_mc()
+    #plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=40, num_replicates=20)
-    #plot_obs_v_sim2()
-    # plot_domain()
-    #plot_s_vs_s(summarize=True)
+    compare_mf6_freyberg(num_workers=40, num_replicates=50)
+    plot_obs_v_sim2()
+    #plot_domain()
+    plot_s_vs_s(summarize=True)
 
     # invest()
     exit()
