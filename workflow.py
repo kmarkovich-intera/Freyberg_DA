@@ -4,6 +4,7 @@ import os
 import sys
 import shutil
 import platform
+import string
 import numpy as np
 import pandas as pd
 import platform
@@ -13,7 +14,7 @@ from matplotlib.patches import Polygon
 import flopy
 from matplotlib.backends.backend_pdf import PdfPages
 
-plt.rcParams.update({'font.size': 12})
+plt.rcParams.update({'font.size': 8})
 
 port = 4021
 
@@ -34,12 +35,12 @@ ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
 keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
 keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
-keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}"]
+keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}$"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
-forecast_units = ["$\\frac{ft^3}{d}","$\\frac{ft^3}{d}","$ft$"]
+forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
 
 def clean_master_dirs():
@@ -871,6 +872,16 @@ def plot_prior_mc():
     """plot the prior monte carlo results for daily, monthly batch and monthly sequential
 
     """
+
+    ognames = keep.copy()
+    ognames.extend(forecast)
+    ognames.sort()
+    label_dict = keep_dict
+    label_dict.update(forecast_dict)
+    unit_dict = {n: u for n, u in zip(forecast, forecast_units)}
+    unit_dict.update({n: u for n, u in zip(keep, keep_units)})
+    print(unit_dict)
+
     c_m_d = "daily_model_files_master_prior"
     s_b_m_d = "monthly_model_files_master_prior"
     s_s_m_d = "seq_monthly_model_files_master_prior"
@@ -889,40 +900,47 @@ def plot_prior_mc():
     s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
     #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
 
-    ognames = list(cobs.obgnme.unique())
-    ognames.sort()
-    ognames.append("sfr_usecol:gage_1")
-    with PdfPages("prior_obs_v_sim.pdf") as pdf:
+    #ognames = list(cobs.obgnme.unique())
+    #ognames.sort()
+    #ognames.append("sfr_usecol:gage_1")
 
-        for ogname in ognames:
-            cgobs = cobs.loc[cobs.obgnme==ogname,:].copy()
-            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obgnme==ogname,:].copy()
+    with PdfPages("prior_obs_v_sim.pdf") as pdf:
+        fig, axes = plt.subplots(len(ognames), 1, figsize=(8, 10))
+        for iax,ogname in enumerate(ognames):
+            ax = axes[iax]
+            cgobs = c_pst.observation_data.loc[c_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
             sgobs.loc[:,"time"] = sgobs.time.apply(float)
             cgobs.loc[:, "time"] = cgobs.time.apply(float)
 
             sgobs.sort_values(by="time", inplace=True)
             cgobs.sort_values(by="time",inplace=True)
 
-            fig,ax = plt.subplots(1,1,figsize=(8,8))
-
-            [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "b", lw=0.01,alpha=0.5) for idx in c_oe.index]
-
-            [ax.plot(sgobs.time,s_b_oe.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe.index]
-
-            if "hds" in ogname:
-                seq_name = ogname.replace("hds_usecol:","")
-            else:
+            seq_name = ogname
+            if "arrobs" not in ogname:
                 seq_name = ogname + "_time:10000.0"
+            print(seq_name)
             for itime,time in enumerate(sgobs.time):
-                oe = s_s_oe_dict[itime]
-                #print(oe.loc[:,seq_name])
-                ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
+                if itime in s_s_oe_dict:
+                    oe = s_s_oe_dict[itime]
+                    #print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
 
-            ax.set_title(ogname)
-            if "gage" not in ogname:
-                ax.set_ylim(30,ax.get_ylim()[1])
-            pdf.savefig()
-            plt.close(fig)
+            [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in c_oe.index]
+
+            [ax.plot(sgobs.time, s_b_oe.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in s_b_oe.index]
+
+            ax.set_title("{0}) {1}".format(string.ascii_uppercase[iax], label_dict[ogname]),loc="left")
+            ax.set_ylabel(unit_dict[ogname])
+
+            #if "gage" not in ogname:
+            #    ax.set_ylim(30,ax.get_ylim()[1])
+        for ax in axes[:-1]:
+            ax.set_xticklabels([])
+        axes[-1].set_xlabel("time ($days$)")
+        plt.tight_layout()
+        pdf.savefig()
+        plt.close(fig)
 
 
 def map_complex_to_simple_bat(c_d,b_d,real_idx):
@@ -1541,25 +1559,25 @@ if __name__ == "__main__":
 
     #sync_phase()
 
-    b_d = setup_interface("monthly_model_files")
-    s_d = monthly_ies_to_da(b_d)
+    #b_d = setup_interface("monthly_model_files")
+    #s_d = monthly_ies_to_da(b_d)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
 
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    c_d = setup_interface("daily_model_files")
+    #c_d = setup_interface("daily_model_files")
     #m_c_d = run_complex_prior_mc(c_d)
-    #plot_prior_mc()
-    exit()
+    plot_prior_mc()
+    #exit()
     #
-    compare_mf6_freyberg(num_workers=40, num_replicates=20)
-    plot_obs_v_sim2()
+    #compare_mf6_freyberg(num_workers=40, num_replicates=20)
+    #plot_obs_v_sim2()
     # plot_domain()
-    plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True)
 
     # invest()
-    # exit()
+    exit()
 
     # BOOLEANS TO SELECT CODE BLOCKS BELOW
     prep_complex_model = False  # do this once before running paired simple/complex analysis
