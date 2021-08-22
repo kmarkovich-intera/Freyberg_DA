@@ -69,7 +69,7 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(num_workers=10,,num_reals=100,num_replicates=100):
+def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
