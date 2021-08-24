@@ -697,7 +697,7 @@ def test_process_lst_file(d):
     return inc,cum
 
 
-def monthly_ies_to_da(org_d):
+def monthly_ies_to_da(org_d,include_sim_states=False):
     """convert the batch monthly model to sequential formulation"""
 
     # load the existing multi-stress period model
@@ -754,6 +754,37 @@ def monthly_ies_to_da(org_d):
     pdf.loc['perlen', :] = pers
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
+
+    if include_sim_states:
+        # first add gw level sim state pars - just copy the "direct head" par template files
+        ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
+        for ic_tpl_file in ic_tpl_files:
+            lines = open(os.path.join(t_d,ic_tpl_file)).readline()
+            new_tpl = ic_tpl_file.replace(".txt.tpl",".sim.txt.tpl")
+            with open(os.path.join(t_d,new_tpl),'w') as f:
+                for line in lines:
+                    f.write(line.replace("direct","sim_direct"))
+            pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
+        # now add double fake pars for the forecasts just so they are getting
+        # estimated one-step-ahead values
+        obs = pst.observation_data
+        fnames = obs.loc[obs.obsnme.apply(lambda x: "arrobs" not in x),"obsnme"].tolist()
+        tpl_file = "double_state_forecast.dat.tpl"
+        with open(os.path.join(t_d,tpl_file),'w') as f:
+            f.write("ptf ~\n")
+            for fname in fnames:
+                f.write("{0}  ~   {0}    ~  ~   sim_{1}    ~\n".format(fname))
+         pst.add_parameters(os.path.join(t_d,tpl_file),pst_path=".")
+
+        # now set the state_par_link for all these
+        # both par data and obs data
+        pst.parameter_data.loc[:,"state_par_link"] = np.nan
+        par = pst.parameter_data
+        sim_pars = par.loc[par.parnme.str.startswith("sim_"),"parnme"]
+        pst.parameter_data.loc[sim_par,"state_par_link"] = sim_pars.apply(lambda x: x.replace("sim_",""))
+
+
+
 
     # save this for later!
     org_obs = pst.observation_data.copy()
@@ -1057,7 +1088,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     return t_d
 
 
-def plot_obs_v_sim2():
+def plot_obs_v_sim2(subdir=".",post_iter=None):
     """plot the results for daily, monthly batch and monthly sequential
 
     """
@@ -1068,8 +1099,11 @@ def plot_obs_v_sim2():
     cobs.loc[:, "time"] = cobs.time.apply(float)
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
 
+    pname = os.path.join(subdir,"obs_v_sim.pdf")
+    if post_iter is not None:
+        pname = os.path.join(subdir,"obs_v_sim_postier_{0}.pdf".format(post_iter))
 
-    with PdfPages("obs_v_sim.pdf") as pdf:
+    with PdfPages(pname) as pdf:
         for ireal in range(100):
             s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
             s_s_m_d = "seq_" + s_b_m_d
@@ -1078,13 +1112,19 @@ def plot_obs_v_sim2():
             try:
                 s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
                 s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-                s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+                bpost_iter = s_b_pst.control_data.noptmax
+                if post_iter is not None:
+                    bpost_iter = post_iter
+                s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
                                         index_col=0)
 
                 s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
                 seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+                spost_iter = s_s_pst.control_data.noptmax
+                if post_iter is not None:
+                    spost_iter = post_iter
                 seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                                   f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith("freyberg")]
+                                   f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith("freyberg")]
 
                 s_s_oe_dict_pr = {int(f.split(".")[1]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files_pr}
                 s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
@@ -1254,7 +1294,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(summarize=False,subdir="."):
+def plot_s_vs_s(summarize=False,subdir=".",post_iter=None):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1273,13 +1313,19 @@ def plot_s_vs_s(summarize=False,subdir="."):
         try:
             s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
             s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(s_b_pst.control_data.noptmax)),
+            bpost_iter = s_b_pst.control_data.noptmax
+            if post_iter is not None:
+                bpost_iter = post_iter
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
                                     index_col=0)
 
             s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
             seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            spost_iter = s_s_pst.control_data.noptmax
+            if post_iter is not None:
+                spost_iter = post_iter
             seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                               f.endswith("{0}.obs.csv".format(s_s_pst.control_data.noptmax)) and f.startswith(
+                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
                                    "freyberg")]
 
             s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
@@ -1304,7 +1350,10 @@ def plot_s_vs_s(summarize=False,subdir="."):
     sbobs_org = s_b_pst.observation_data
     print("plotting")
     size,lw=3,0.5
-    with PdfPages(os.path.join(subdir,"s_vs_s.pdf")) as pdf:
+    pname = os.path.join(subdir,"s_vs_s.pdf")
+    if post_iter is not None:
+        pname = os.path.join(subdir,"s_vs_s_postiter_{0}.pdf".format(post_iter))
+    with PdfPages(pname) as pdf:
         for ogname in ognames:
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
             sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
@@ -1582,8 +1631,8 @@ if __name__ == "__main__":
 
     #sync_phase()
 
-    #b_d = setup_interface("monthly_model_files")
-    #s_d = monthly_ies_to_da(b_d)
+    b_d = setup_interface("monthly_model_files")
+    s_d = monthly_ies_to_da(b_d,include_sim_states=True)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
@@ -1596,8 +1645,10 @@ if __name__ == "__main__":
     #
     #compare_mf6_freyberg(num_workers=40, num_replicates=50)
     #plot_obs_v_sim2()
+    #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True,subdir="naive_20rep_100real")
+    #plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
     exit()
