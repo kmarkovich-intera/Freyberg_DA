@@ -785,11 +785,11 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
         ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
         for ic_tpl_file in ic_tpl_files:
             lines = open(os.path.join(t_d,ic_tpl_file)).readlines()
-            new_tpl = ic_tpl_file.replace(".txt.tpl",".sim.txt.tpl")
+            new_tpl = ic_tpl_file.replace(".txt.tpl",".est.txt.tpl")
             with open(os.path.join(t_d,new_tpl),'w') as f:
                 for line in lines:
 
-                    f.write(line.replace("direct","sim_direct"))
+                    f.write(line.replace("direct","est_direct"))
             df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
             pst.parameter_data.loc[df.parnme,"parval1"] = 40
             pst.parameter_data.loc[df.parnme, "parubnd"] = 60
@@ -803,7 +803,7 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
         with open(os.path.join(t_d,tpl_file),'w') as f:
             f.write("ptf ~\n")
             for fname in fnames:
-                f.write("{0}  ~   {0}    ~  ~   sim_{0}    ~\n".format(fname))
+                f.write("{0}  ~   ipar_{0}    ~  ~   est_ipar_{0}    ~\n".format(fname))
         df = pst.add_parameters(os.path.join(t_d,tpl_file),pst_path=".")
         pst.parameter_data.loc[df.parnme, "parval1"] = 0
         pst.parameter_data.loc[df.parnme, "parubnd"] = 1.0e+10
@@ -815,9 +815,13 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
         # both par data and obs data
         pst.parameter_data.loc[:,"state_par_link"] = np.nan
         par = pst.parameter_data
-        sim_pars = par.loc[par.parnme.str.startswith("sim_"),"parnme"]
-        pst.parameter_data.loc[sim_pars,"state_par_link"] = sim_pars.apply(lambda x: x.replace("sim_",""))
+        est_pars = par.loc[par.parnme.str.startswith("est_"),"parnme"]
+        pst.parameter_data.loc[est_pars,"state_par_link"] = est_pars.apply(lambda x: x.replace("est_",""))
 
+
+        sim_pars = par.loc[par.parnme.str.startswith("ipar_"),"parnme"]
+        obs_equiv = sim_pars.apply(lambda x: x.replace("ipar_",""))
+        pst.observation_data.loc[obs_equiv.values,"state_par_link"] = sim_pars.values
 
     # now set cycles
     pst.observation_data.loc[:, 'cycle'] = -1
@@ -1306,7 +1310,7 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(summarize=False,subdir=".",post_iter=None):
+def plot_s_vs_s(summarize=False, subdir=".", post_iter=None, include_est_states=False):
 
     ognames = keep
     ognames.extend(forecast)
@@ -1316,46 +1320,61 @@ def plot_s_vs_s(summarize=False,subdir=".",post_iter=None):
     # first rip thru all the dirs and load...
     s_b_dict = {}
     s_s_dict = {}
+    s_s_est_dict = {}
     print("loading results...")
+
     for ireal in range(100):
         s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
-        try:
-            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
-            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-            bpost_iter = s_b_pst.control_data.noptmax
-            if post_iter is not None:
-                bpost_iter = post_iter
-            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
-                                    index_col=0)
+        #try:
+        s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+        s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+        bpost_iter = s_b_pst.control_data.noptmax
+        if post_iter is not None:
+            bpost_iter = post_iter
+        s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                index_col=0)
 
-            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
-            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
-            spost_iter = s_s_pst.control_data.noptmax
-            if post_iter is not None:
-                spost_iter = post_iter
-            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
-                                   "freyberg")]
+        s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+        seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+        spost_iter = s_s_pst.control_data.noptmax
+        if post_iter is not None:
+            spost_iter = post_iter
+        seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                           f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
+                               "freyberg")]
 
-            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                              seq_oe_files_pr}
-            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                              seq_oe_files_pt}
+        s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                          seq_oe_files_pr}
+        s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                          seq_oe_files_pt}
 
-            s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
-            s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
-            print(ireal)
-        except:
-            break
+        s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
+        s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
 
+        if include_est_states:
+            # key these one cycle ahead since the posterior est states for this cycle are equiv to the prior sim states
+            # of next cycle
+            s_s_pe_dict_pt = {int(f.split(".")[1]) + 1: pd.read_csv(os.path.join(s_s_m_d, f.replace(".obs.",".par.")),
+                                                                index_col=0) for f in seq_oe_files_pt}
+            s_s_est_dict[ireal] = s_s_pe_dict_pt
+        print(ireal)
+        #except:
+        break
 
+    obs = s_s_pst.observation_data
+    sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
+    par = s_s_pst.parameter_data
+    sfpar = par.loc[pd.notna(par.state_par_link),:]
+    sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
+    #for v in ["k","i","j"]:
+    #    par.loc[:,v] = par.loc[:,v].apply(float)
+    #istate_par = par.loc[par.parnme.str.contains("")]
 
     if len(s_b_dict) == 0:
         raise Exception()
-
 
     ireals = list(s_s_dict.keys())
     ireals.sort()
@@ -1365,6 +1384,7 @@ def plot_s_vs_s(summarize=False,subdir=".",post_iter=None):
     pname = os.path.join(subdir,"s_vs_s.pdf")
     if post_iter is not None:
         pname = os.path.join(subdir,"s_vs_s_postiter_{0}.pdf".format(post_iter))
+
     with PdfPages(pname) as pdf:
         for ogname in ognames:
             sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
@@ -1448,6 +1468,33 @@ def plot_s_vs_s(summarize=False,subdir=".",post_iter=None):
                                        alpha=0.5,s=size)
                             axesall[0,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
                                        alpha=0.5,s=size)
+
+                    # the estimated states...
+                    s_s_pe_dict_pt = s_s_est_dict.get(ireal,None)
+                    if s_s_pe_dict_pt is not None and itime in s_s_pe_dict_pt:
+                        pe = s_s_pe_dict_pt[itime]
+                        pname = sobs_to_sipar[seq_name]
+                        simseq_name = sipar_to_sfpar[pname]
+                        if summarize:
+                            mn = pe.loc[:, simseq_name].mean()
+                            lq = pe.loc[:, simseq_name].quantile(0.05)
+                            uq = pe.loc[:, simseq_name].quantile(0.95)
+                            axes[0, 1].scatter(mn, cval,
+                                               marker="*", color="0.5", alpha=0.5,s=size)
+                            axes[0, 1].plot([lq, uq], [cval, cval],
+                                            color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
+
+                            axesall[0, 1].scatter(mn, cval,
+                                                  marker="*", color="0.5", alpha=0.5,s=size)
+                            axesall[0, 1].plot([lq, uq], [cval, cval],
+                                               color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
+
+                        else:
+                            axes[0,1].scatter(pe.loc[:, simseq_name],[cval for _ in range(pe.shape[0])], marker="*", color="0.5",
+                                       alpha=0.5,s=size)
+                            axesall[0,1].scatter(pe.loc[:, simseq_name], [cval for _ in range(pe.shape[0])], marker="*", color="0.5",
+                                       alpha=0.5,s=size)
+
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
                         if summarize:
@@ -1643,8 +1690,8 @@ if __name__ == "__main__":
 
     #sync_phase()
 
-    b_d = setup_interface("monthly_model_files")
-    #b_d = "monthly_model_files_template"
+    #b_d = setup_interface("monthly_model_files")
+    b_d = "monthly_model_files_template"
     s_d = monthly_ies_to_da(b_d,include_sim_states=True)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
@@ -1660,7 +1707,7 @@ if __name__ == "__main__":
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True, include_est_states=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
