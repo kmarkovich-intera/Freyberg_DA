@@ -755,33 +755,6 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
-    if include_sim_states:
-        # first add gw level sim state pars - just copy the "direct head" par template files
-        ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
-        for ic_tpl_file in ic_tpl_files:
-            lines = open(os.path.join(t_d,ic_tpl_file)).readline()
-            new_tpl = ic_tpl_file.replace(".txt.tpl",".sim.txt.tpl")
-            with open(os.path.join(t_d,new_tpl),'w') as f:
-                for line in lines:
-                    f.write(line.replace("direct","sim_direct"))
-            pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
-        # now add double fake pars for the forecasts just so they are getting
-        # estimated one-step-ahead values
-        obs = pst.observation_data
-        fnames = obs.loc[obs.obsnme.apply(lambda x: "arrobs" not in x),"obsnme"].tolist()
-        tpl_file = "double_state_forecast.dat.tpl"
-        with open(os.path.join(t_d,tpl_file),'w') as f:
-            f.write("ptf ~\n")
-            for fname in fnames:
-                f.write("{0}  ~   {0}    ~  ~   sim_{1}    ~\n".format(fname))
-         pst.add_parameters(os.path.join(t_d,tpl_file),pst_path=".")
-
-        # now set the state_par_link for all these
-        # both par data and obs data
-        pst.parameter_data.loc[:,"state_par_link"] = np.nan
-        par = pst.parameter_data
-        sim_pars = par.loc[par.parnme.str.startswith("sim_"),"parnme"]
-        pst.parameter_data.loc[sim_par,"state_par_link"] = sim_pars.apply(lambda x: x.replace("sim_",""))
 
 
 
@@ -806,6 +779,45 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
             for line in ins_lines[:3]:
                 f.write(line)
         pst.add_observations(os.path.join(t_d, ins_name), pst_path=".")
+
+    if include_sim_states:
+        # first add gw level sim state pars - just copy the "direct head" par template files
+        ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
+        for ic_tpl_file in ic_tpl_files:
+            lines = open(os.path.join(t_d,ic_tpl_file)).readlines()
+            new_tpl = ic_tpl_file.replace(".txt.tpl",".sim.txt.tpl")
+            with open(os.path.join(t_d,new_tpl),'w') as f:
+                for line in lines:
+
+                    f.write(line.replace("direct","sim_direct"))
+            df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
+            pst.parameter_data.loc[df.parnme,"parval1"] = 40
+            pst.parameter_data.loc[df.parnme, "parubnd"] = 60
+            pst.parameter_data.loc[df.parnme, "parlbnd"] = 20
+
+        # now add double fake pars for the forecasts just so they are getting
+        # estimated one-step-ahead values
+        obs = pst.observation_data
+        fnames = obs.loc[obs.obsnme.apply(lambda x: "arrobs" not in x),"obsnme"].tolist()
+        tpl_file = "double_state_forecast.dat.tpl"
+        with open(os.path.join(t_d,tpl_file),'w') as f:
+            f.write("ptf ~\n")
+            for fname in fnames:
+                f.write("{0}  ~   {0}    ~  ~   sim_{0}    ~\n".format(fname))
+        df = pst.add_parameters(os.path.join(t_d,tpl_file),pst_path=".")
+        pst.parameter_data.loc[df.parnme, "parval1"] = 0
+        pst.parameter_data.loc[df.parnme, "parubnd"] = 1.0e+10
+        pst.parameter_data.loc[df.parnme, "parlbnd"] = -1.0e+10
+        pst.parameter_data.loc[df.parnme, "partrans"] = "none"
+        pst.parameter_data.loc[df.parnme, "parchglim"] = "relative"
+
+        # now set the state_par_link for all these
+        # both par data and obs data
+        pst.parameter_data.loc[:,"state_par_link"] = np.nan
+        par = pst.parameter_data
+        sim_pars = par.loc[par.parnme.str.startswith("sim_"),"parnme"]
+        pst.parameter_data.loc[sim_pars,"state_par_link"] = sim_pars.apply(lambda x: x.replace("sim_",""))
+
 
     # now set cycles
     pst.observation_data.loc[:, 'cycle'] = -1
@@ -1632,6 +1644,7 @@ if __name__ == "__main__":
     #sync_phase()
 
     b_d = setup_interface("monthly_model_files")
+    #b_d = "monthly_model_files_template"
     s_d = monthly_ies_to_da(b_d,include_sim_states=True)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
