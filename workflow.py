@@ -1708,7 +1708,7 @@ if __name__ == "__main__":
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
     plot_s_vs_s(summarize=True, include_est_states=True)
-    #plot_s_vs_s(summarize=True,post_iter=1)
+    #plot_s_vs_s(summarize=True,post_iter=1,include_est_states=True)
 
     # invest()
     exit()
