@@ -942,12 +942,38 @@ def plot_prior_mc():
 
     s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
     seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
-    s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
+    #s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
     #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
 
     #ognames = list(cobs.obgnme.unique())
     #ognames.sort()
     #ognames.append("sfr_usecol:gage_1")
+
+
+    with PdfPages("prior_lst_budget.pdf") as pdf:
+        c_lst_obs = c_pst.observation_data.copy()
+        c_lst_obs = c_lst_obs.loc[c_lst_obs.obsnme.apply(lambda x: x.startswith("inc")),:]
+        c_lst_obs.loc[:,"time"] = c_lst_obs.time.apply(float)
+        b_lst_obs = s_b_pst.observation_data.copy()
+        b_lst_obs = b_lst_obs.loc[b_lst_obs.obsnme.apply(lambda x: x.startswith("inc")), :]
+        b_lst_obs.loc[:, "time"] = b_lst_obs.time.apply(float)
+        lst_grps = c_lst_obs.obgnme.unique().tolist()
+        lst_grps.sort()
+        for lst_grp in lst_grps:
+            print(lst_grp)
+            bgobs = b_lst_obs.loc[b_lst_obs.obgnme==lst_grp,:].copy()
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            inc = bgobs.loc[bgobs.obsnme.str.startswith("inc"),:].copy()
+            inc.sort_values(by="time",inplace=True)
+            [ax.plot(inc.time,s_b_oe.loc[idx,inc.obsnme],"0.5", alpha=0.3) for idx in s_b_oe.index]
+            cgobs = c_lst_obs.loc[c_lst_obs.obgnme == lst_grp, :].copy()
+            inc = cgobs.loc[cgobs.obsnme.str.startswith("inc"), :].copy()
+            inc.sort_values(by="time", inplace=True)
+            [ax.plot(inc.time, c_oe.loc[idx, inc.obsnme], "b",alpha=0.3) for idx in c_oe.index]
+            ax.set_title(lst_grp)
+            pdf.savefig()
+            plt.close(fig)
+
 
     with PdfPages("prior_obs_v_sim.pdf") as pdf:
         fig, axes = plt.subplots(len(ognames), 1, figsize=(8, 10))
@@ -986,6 +1012,10 @@ def plot_prior_mc():
         plt.tight_layout()
         pdf.savefig()
         plt.close(fig)
+
+
+
+
 
 
 def map_complex_to_simple_bat(c_d,b_d,real_idx):
@@ -1688,26 +1718,26 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    #sync_phase()
+    sync_phase()
 
-    #b_d = setup_interface("monthly_model_files")
+    b_d = setup_interface("monthly_model_files")
     #b_d = "monthly_model_files_template"
-    #s_d = monthly_ies_to_da(b_d,include_sim_states=True)
+    s_d = monthly_ies_to_da(b_d,include_sim_states=True)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
 
-    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    #c_d = setup_interface("daily_model_files")
-    #m_c_d = run_complex_prior_mc(c_d)
-    #plot_prior_mc()
-    #exit()
+    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    c_d = setup_interface("daily_model_files")
+    m_c_d = run_complex_prior_mc(c_d)
+    plot_prior_mc()
+    exit()
     #
     #compare_mf6_freyberg(num_workers=40, num_replicates=50)
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True, include_est_states=True)
+    #plot_s_vs_s(summarize=True, include_est_states=True)
     #plot_s_vs_s(summarize=True,post_iter=1,include_est_states=True)
 
     # invest()
