@@ -504,7 +504,7 @@ def setup_interface(org_ws, num_reals=100):
     rch_gs = pyemu.geostats.GeoStruct(variograms=rch_v)
 
     # the geostruct for temporal correlation
-    temporal_gs = pyemu.geostats.GeoStruct(variograms=pyemu.geostats.ExpVario(contribution=1.0, a=60))
+    temporal_gs = pyemu.geostats.GeoStruct(variograms=pyemu.geostats.ExpVario(contribution=1.0, a=30))
 
     # import flopy as part of the forward run process
     pf.extra_py_imports.append('flopy')
@@ -513,8 +513,8 @@ def setup_interface(org_ws, num_reals=100):
     ib = m.dis.idomain[0].array
 
     # define a dict that contains file name tags and lower/upper bound information
-    tags = {"npf_k_": [0.1, 10.], "npf_k33_": [.1, 10], "sto_ss": [.1, 10], "sto_sy": [.9, 1.1],
-            "rch_recharge": [.5, 1.5]}
+    tags = {"npf_k_": [0.2, 5.], "npf_k33_": [.2, 5], "sto_ss": [.5, 2], "sto_sy": [.8, 1.2],
+            "rch_recharge": [.6, 1.4]}
     dts = pd.to_datetime("1-1-2018") + \
           pd.to_timedelta(np.cumsum(sim.tdis.perioddata.array["perlen"]), unit="d")
 
@@ -562,6 +562,9 @@ def setup_interface(org_ws, num_reals=100):
                 pf.add_parameters(filenames=arr_file, par_type="grid", par_name_base=arr_file.split('.')[1] + "_gr",
                                   pargp=arr_file.split('.')[1] + "_gr", zone_array=ib, upper_bound=ub, lower_bound=lb,
                                   geostruct=grid_gs)
+                pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
+                                  pargp=arr_file.split('.')[1] + "_cn", zone_array=ib, upper_bound=ub, lower_bound=lb,
+                                  geostruct=grid_gs)
                 pf.add_parameters(filenames=arr_file, par_type="pilotpoints",
                                   par_name_base=arr_file.split('.')[1] + "_pp",
                                   pargp=arr_file.split('.')[1] + "_pp", zone_array=ib, upper_bound=ub, lower_bound=lb,
@@ -591,18 +594,18 @@ def setup_interface(org_ws, num_reals=100):
         # add spatially constant, but temporally correlated parameter
         pf.add_parameters(filenames=list_file, par_type="constant", par_name_base="twel_mlt_{0}".format(kper),
                           pargp="twel_mlt".format(kper), index_cols=[0, 1, 2], use_cols=[3],
-                          upper_bound=1.5, lower_bound=0.5, datetime=dts[kper], geostruct=temporal_gs)
+                          upper_bound=5, lower_bound=0.2, datetime=dts[kper], geostruct=temporal_gs)
 
     # add temporally indep, but spatially correlated grid-scale parameters, one per well
     pf.add_parameters(filenames=list_files, par_type="grid", par_name_base="wel_grid",
                       pargp="wel_grid", index_cols=[0, 1, 2], use_cols=[3],
-                      upper_bound=1.5, lower_bound=0.5)
+                      upper_bound=2, lower_bound=0.5)
 
     # add grid-scale parameters for SFR reach conductance.  Use layer, row, col and reach
     # number in the parameter names
     pf.add_parameters(filenames="freyberg6.sfr_packagedata.txt", par_name_base="sfr_rhk",
-                      pargp="sfr_rhk", index_cols=[0, 1, 2, 3], use_cols=[9], upper_bound=10.,
-                      lower_bound=0.1,
+                      pargp="sfr_rhk", index_cols=[0, 1, 2, 3], use_cols=[9], upper_bound=20.,
+                      lower_bound=0.05,
                       par_type="grid")
 
     # add model run command
@@ -918,6 +921,8 @@ def plot_prior_mc():
 
     """
 
+
+
     ognames = keep.copy()
     ognames.extend(forecast)
     ognames.sort()
@@ -927,9 +932,13 @@ def plot_prior_mc():
     unit_dict.update({n: u for n, u in zip(keep, keep_units)})
     print(unit_dict)
 
+
     c_m_d = "daily_model_files_master_prior"
     s_b_m_d = "monthly_model_files_master_prior"
     s_s_m_d = "seq_monthly_model_files_master_prior"
+
+    top = np.loadtxt(os.path.join(s_b_m_d,"freyberg6.dis_top.txt"))
+
 
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
     obs = c_pst.observation_data
@@ -942,7 +951,7 @@ def plot_prior_mc():
 
     s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
     seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
-    #s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
+    s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
     #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
 
     #ognames = list(cobs.obgnme.unique())
@@ -987,6 +996,9 @@ def plot_prior_mc():
             sgobs.sort_values(by="time", inplace=True)
             cgobs.sort_values(by="time",inplace=True)
 
+
+
+
             seq_name = ogname
             if "arrobs" not in ogname:
                 seq_name = ogname + "_time:10000.0"
@@ -1001,6 +1013,12 @@ def plot_prior_mc():
 
             [ax.plot(sgobs.time, s_b_oe.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in s_b_oe.index]
 
+
+            if "arrobs" in ogname:
+                i = sgobs.i.apply(int)[0]
+                j = sgobs.j.apply(int)[0]
+                t = top[i, j]
+                ax.plot(ax.get_xlim(),[t,t],"k--",lw=3)
             ax.set_title("{0}) {1}".format(string.ascii_uppercase[iax], label_dict[ogname]),loc="left")
             ax.set_ylabel(unit_dict[ogname])
 
@@ -1631,7 +1649,7 @@ def sync_phase():
 
     for d in [t_c_d,t_s_d]:
         rch_files = [f for f in os.listdir(d) if "rch_recharge" in f]
-        rch_files = {int(f.split(".")[1].split("_")[-1]):np.loadtxt(os.path.join(d,f)) for f in rch_files}
+        rch_files = {int(f.split(".")[1].split("_")[-1]):np.loadtxt(os.path.join(d,f)) * 0.75 for f in rch_files}
         keys = list(rch_files.keys())
         keys.sort()
         # calc the first sp recharge as the mean of the others
@@ -1653,8 +1671,10 @@ def sync_phase():
         for sp,df in wel_files.items():
             # uniform base pumping otherwise
             if sp != 1:
-                df.loc[:,"flux"] = -150.0
+                df.loc[:,"flux"] = -300.0
             df.to_csv(os.path.join(d,"freyberg6.wel_stress_period_data_{0}.txt".format(sp)),index=False,header=False,sep=" ")
+
+
 
     c_sim = flopy.mf6.MFSimulation.load(sim_ws=t_c_d)
     cdts = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(c_sim.tdis.perioddata.array["perlen"]),unit="d")
@@ -1718,22 +1738,22 @@ def sync_phase():
 
 if __name__ == "__main__":
 
-    sync_phase()
+    #sync_phase()
 
-    b_d = setup_interface("monthly_model_files")
+    #b_d = setup_interface("monthly_model_files")
     #b_d = "monthly_model_files_template"
-    s_d = monthly_ies_to_da(b_d,include_sim_states=True)
+    #s_d = monthly_ies_to_da(b_d,include_sim_states=True)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
 
-    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    c_d = setup_interface("daily_model_files")
-    m_c_d = run_complex_prior_mc(c_d)
-    plot_prior_mc()
-    exit()
+    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    #c_d = setup_interface("daily_model_files")
+    #m_c_d = run_complex_prior_mc(c_d)
+    #plot_prior_mc()
+    #exit()
     #
-    #compare_mf6_freyberg(num_workers=40, num_replicates=50)
+    compare_mf6_freyberg(num_workers=40, num_replicates=50)
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
