@@ -69,21 +69,19 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True):
+def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
+                         run_ies=True,run_da=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
     for ireal in range(num_replicates):
 
         ies_t_d = map_complex_to_simple_bat(complex_dir,bat_dir,ireal)
-        da_t_d = map_simple_bat_to_seq(ies_t_d,seq_dir)
 
         # run batch and sequential simple models
         # ies stuff
         ies_pst = pyemu.Pst(os.path.join(ies_t_d, "freyberg.pst"))
 
-        # prep that prior ensemble for da
-        da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg.pst"))
 
         ies_pst.pestpp_options["ies_par_en"] = "prior.jcb"
 
@@ -99,36 +97,58 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         ies_pst.pestpp_options["ies_num_reals"] = num_reals
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
+
+        #mark the future pars fixed
+        par = ies_pst.parameter_data
+        rch_par = par.loc[par.parnme.str.contains("direct_const_rch_recharge"),:].copy()
+        rch_par.loc[:,"kper"] = rch_par.parnme.apply(lambda x: int(x.split('_')[4]) - 1)
+        rch_par = rch_par.loc[rch_par.kper>=13,"parnme"]
+        par.loc[rch_par,"partrans"] = "fixed"
+
+        twel_par = par.loc[par.parnme.str.contains("twel_mlt"), :].copy()
+        twel_par.loc[:, "kper"] = twel_par.parnme.apply(lambda x: int(x.split('_')[2]))
+        twel_par = twel_par.loc[twel_par.kper>=13,"parnme"]
+        par.loc[twel_par,"partrans"] = "fixed"
+
+
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
 
-        # set pestpp options for sequential da
-        da_pst.pestpp_options.pop("da_num_reals", None)
-        da_pst.pestpp_options.pop("ies_num_reals", None)
-        da_pst.pestpp_options["ies_no_noise"] = False
-        da_pst.pestpp_options["ies_verbose_level"] = 1
-        da_pst.pestpp_options.pop("ies_localizer", None)
-        da_pst.pestpp_options["ies_autoadaloc"] = False
-        da_pst.pestpp_options["ies_save_lambda_en"] = False
-        da_pst.pestpp_options["ies_drop_conflicts"] = False
-        da_pst.pestpp_options["ies_num_reals"] = num_reals
-        da_pst.pestpp_options["ies_use_mda"] = False
-        da_pst.pestpp_options["da_use_simulated_states"] = use_sim_states
-        da_pst.control_data.noptmax = 3
-        da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
         # run da          
-        m_da_dir = da_t_d.replace("template","master")
 
-        pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
-                                     num_workers=num_workers, master_dir=m_da_dir, verbose=True)
+        if run_da:
+            da_t_d = map_simple_bat_to_seq(ies_t_d, seq_dir)
 
-        shutil.rmtree(da_t_d)
+            # prep that prior ensemble for da
+            da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg.pst"))
+
+            # set pestpp options for sequential da
+            da_pst.pestpp_options.pop("da_num_reals", None)
+            da_pst.pestpp_options.pop("ies_num_reals", None)
+            da_pst.pestpp_options["ies_no_noise"] = False
+            da_pst.pestpp_options["ies_verbose_level"] = 1
+            da_pst.pestpp_options.pop("ies_localizer", None)
+            da_pst.pestpp_options["ies_autoadaloc"] = False
+            da_pst.pestpp_options["ies_save_lambda_en"] = False
+            da_pst.pestpp_options["ies_drop_conflicts"] = False
+            da_pst.pestpp_options["ies_num_reals"] = num_reals
+            da_pst.pestpp_options["ies_use_mda"] = False
+            da_pst.pestpp_options["da_use_simulated_states"] = use_sim_states
+            da_pst.control_data.noptmax = 3
+            da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
+
+            m_da_dir = da_t_d.replace("template", "master")
+            pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
+                                         num_workers=num_workers, master_dir=m_da_dir, verbose=True)
+
+            shutil.rmtree(da_t_d)
 
         # run ies
-        #m_ies_dir = ies_t_d.replace("template","master")
+        m_ies_dir = ies_t_d.replace("template","master")
 
-        #pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
-        #                             num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
+        if run_ies:
+            pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
+                                      num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
 
@@ -1226,9 +1246,9 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 break
 
 
-            ognames = keep
+            ognames = keep.copy()
             ognames.extend(forecast)
-            label_dict = keep_dict
+            label_dict = keep_dict.copy()
             label_dict.update(forecast_dict)
 
             for ogname in ognames:
@@ -1258,7 +1278,7 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 seq_name = ogname
                 if "arrobs" not in ogname:
                     seq_name = ogname + "_time:10000.0"
-                print(seq_name)
+                print(ireal,seq_name)
                 for itime,time in enumerate(sgobs.time):
                     #itime += 1
 
@@ -1770,6 +1790,44 @@ def sync_phase():
     return t_c_d,t_s_d
 
 
+def clean_results(subdir="."):
+    clean_dir = os.path.join(subdir,"clean")
+    if os.path.exists(clean_dir):
+        shutil.rmtree(clean_dir)
+    os.makedirs(clean_dir)
+    #print(os.listdir(subdir))
+    b_ds = [d for d in os.listdir(subdir) if os.path.isdir(os.path.join(subdir,d)) and d.startswith("monthly_model_files_master")]
+    s_ds = [d for d in os.listdir(subdir) if os.path.isdir(os.path.join(subdir,d)) and d.startswith("seq_monthly_model_files_master")]
+
+    b_tags = set(["obs_data.csv",".obs.csv",".par.csv",".rec"])
+    def contains(fname):
+        return True if True in [True if tag in fname else False for tag in b_tags] else False
+
+    for b_d in s_ds:
+        org_b_d = os.path.join(subdir,b_d)
+        new_b_d = os.path.join(clean_dir,b_d)
+        os.mkdir(new_b_d)
+        files = [f.lower() for f in os.listdir(org_b_d)]
+        keep = [f for f in files if contains(f)]
+        for k in keep:
+            shutil.copy2(os.path.join(org_b_d,k),os.path.join(new_b_d,k))
+        print(b_d)
+
+    for b_d in b_ds:
+        org_b_d = os.path.join(subdir,b_d)
+        new_b_d = os.path.join(clean_dir,b_d)
+        os.mkdir(new_b_d)
+        files = [f.lower() for f in os.listdir(org_b_d)]
+        keep = [f for f in files if contains(f)]
+        for k in keep:
+            shutil.copy2(os.path.join(org_b_d,k),os.path.join(new_b_d,k))
+        print(b_d)
+
+
+
+
+
+
 if __name__ == "__main__":
 
     #sync_phase()
@@ -1787,14 +1845,16 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True)
-    plot_obs_v_sim2(subdir="naive_50reals_eststates")
+    compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
+                         run_ies=True,run_da=False)
+    #plot_obs_v_sim2(subdir="naive_50reals_eststates")
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
     #plot_s_vs_s(summarize=True, include_est_states=False, subdir="naive_50reals_eststates")
     #plot_s_vs_s(summarize=True,post_iter=1,include_est_states=True)
 
     # invest()
+    clean_results("naive_50reals_eststates")
     exit()
 
     # BOOLEANS TO SELECT CODE BLOCKS BELOW
