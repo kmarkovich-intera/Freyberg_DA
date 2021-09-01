@@ -69,7 +69,7 @@ def clean_master_dirs():
         os.chdir('..')
 
 
-def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100):
+def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
@@ -112,6 +112,7 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100):
         da_pst.pestpp_options["ies_drop_conflicts"] = False
         da_pst.pestpp_options["ies_num_reals"] = num_reals
         da_pst.pestpp_options["ies_use_mda"] = False
+        da_pst.pestpp_options["da_use_simulated_states"] = use_sim_states
         da_pst.control_data.noptmax = 3
         da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
@@ -123,11 +124,11 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100):
 
         shutil.rmtree(da_t_d)
 
-        # run ies  
-        m_ies_dir = ies_t_d.replace("template","master")
+        # run ies
+        #m_ies_dir = ies_t_d.replace("template","master")
 
-        pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
-                                     num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
+        #pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
+        #                             num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
 
@@ -504,7 +505,7 @@ def setup_interface(org_ws, num_reals=100):
     rch_gs = pyemu.geostats.GeoStruct(variograms=rch_v)
 
     # the geostruct for temporal correlation
-    temporal_gs = pyemu.geostats.GeoStruct(variograms=pyemu.geostats.ExpVario(contribution=1.0, a=30))
+    #temporal_gs = pyemu.geostats.GeoStruct(variograms=pyemu.geostats.ExpVario(contribution=1.0, a=30))
 
     # import flopy as part of the forward run process
     pf.extra_py_imports.append('flopy')
@@ -514,7 +515,7 @@ def setup_interface(org_ws, num_reals=100):
 
     # define a dict that contains file name tags and lower/upper bound information
     tags = {"npf_k_": [0.2, 5.], "npf_k33_": [.2, 5], "sto_ss": [.5, 2], "sto_sy": [.8, 1.2],
-            "rch_recharge": [.6, 1.4]}
+            "rch_recharge": [.5, 1.5]}
     dts = pd.to_datetime("1-1-2018") + \
           pd.to_timedelta(np.cumsum(sim.tdis.perioddata.array["perlen"]), unit="d")
 
@@ -547,11 +548,12 @@ def setup_interface(org_ws, num_reals=100):
                 print(arr_file,arr.mean(),arr.std())
                 uub = arr.mean() * ub
                 llb = arr.mean() * lb
+                if "daily" in org_ws.lower():
+                    uub *= 5
+                    llb /= 5
                 kper = int(arr_file.split('.')[1].split('_')[-1]) - 1
                 pf.add_parameters(filenames=arr_file, par_type="constant", par_name_base=arr_file.split('.')[1] + "_cn",
                                   pargp="rch_const", zone_array=ib, upper_bound=uub, lower_bound=llb,
-                                  geostruct=temporal_gs,
-                                  datetime=dts[kper],
                                   par_style="direct")
 
 
@@ -568,7 +570,7 @@ def setup_interface(org_ws, num_reals=100):
                 pf.add_parameters(filenames=arr_file, par_type="pilotpoints",
                                   par_name_base=arr_file.split('.')[1] + "_pp",
                                   pargp=arr_file.split('.')[1] + "_pp", zone_array=ib, upper_bound=ub, lower_bound=lb,
-                                  pp_space=int(5 * redis_fac), geostruct=pp_gs)
+                                  pp_space=5, geostruct=pp_gs)
 
     # add direct pars for the ic strt values
     tag = "ic_strt"
@@ -594,12 +596,15 @@ def setup_interface(org_ws, num_reals=100):
         # add spatially constant, but temporally correlated parameter
         pf.add_parameters(filenames=list_file, par_type="constant", par_name_base="twel_mlt_{0}".format(kper),
                           pargp="twel_mlt".format(kper), index_cols=[0, 1, 2], use_cols=[3],
-                          upper_bound=5, lower_bound=0.2, datetime=dts[kper], geostruct=temporal_gs)
+                          upper_bound=5, lower_bound=0.2, datetime=dts[kper])
 
+    lb,ub = .2,5
+    if "daily" in org_ws.lower():
+        lb, ub = .1, 10
     # add temporally indep, but spatially correlated grid-scale parameters, one per well
     pf.add_parameters(filenames=list_files, par_type="grid", par_name_base="wel_grid",
                       pargp="wel_grid", index_cols=[0, 1, 2], use_cols=[3],
-                      upper_bound=2, lower_bound=0.5)
+                      upper_bound=ub, lower_bound=lb)
 
     # add grid-scale parameters for SFR reach conductance.  Use layer, row, col and reach
     # number in the parameter names
@@ -959,7 +964,7 @@ def plot_prior_mc():
     #ognames.append("sfr_usecol:gage_1")
 
 
-    with PdfPages("prior_lst_budget.pdf") as pdf:
+    with PdfPages("prior_lst_budget_inc.pdf") as pdf:
         c_lst_obs = c_pst.observation_data.copy()
         c_lst_obs = c_lst_obs.loc[c_lst_obs.obsnme.apply(lambda x: x.startswith("inc")),:]
         c_lst_obs.loc[:,"time"] = c_lst_obs.time.apply(float)
@@ -974,11 +979,35 @@ def plot_prior_mc():
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
             inc = bgobs.loc[bgobs.obsnme.str.startswith("inc"),:].copy()
             inc.sort_values(by="time",inplace=True)
-            [ax.plot(inc.time,s_b_oe.loc[idx,inc.obsnme],"0.5", alpha=0.3) for idx in s_b_oe.index]
+            [ax.plot(inc.time,s_b_oe.loc[idx,inc.obsnme],"0.5", alpha=0.1) for idx in s_b_oe.index]
             cgobs = c_lst_obs.loc[c_lst_obs.obgnme == lst_grp, :].copy()
             inc = cgobs.loc[cgobs.obsnme.str.startswith("inc"), :].copy()
             inc.sort_values(by="time", inplace=True)
-            [ax.plot(inc.time, c_oe.loc[idx, inc.obsnme], "b",alpha=0.3) for idx in c_oe.index]
+            [ax.plot(inc.time, c_oe.loc[idx, inc.obsnme], "b--",alpha=0.1) for idx in c_oe.index]
+            ax.set_title(lst_grp)
+            pdf.savefig()
+            plt.close(fig)
+
+    with PdfPages("prior_lst_budget_cum.pdf") as pdf:
+        c_lst_obs = c_pst.observation_data.copy()
+        c_lst_obs = c_lst_obs.loc[c_lst_obs.obsnme.apply(lambda x: x.startswith("cum")),:]
+        c_lst_obs.loc[:,"time"] = c_lst_obs.time.apply(float)
+        b_lst_obs = s_b_pst.observation_data.copy()
+        b_lst_obs = b_lst_obs.loc[b_lst_obs.obsnme.apply(lambda x: x.startswith("cum")), :]
+        b_lst_obs.loc[:, "time"] = b_lst_obs.time.apply(float)
+        lst_grps = c_lst_obs.obgnme.unique().tolist()
+        lst_grps.sort()
+        for lst_grp in lst_grps:
+            print(lst_grp)
+            bgobs = b_lst_obs.loc[b_lst_obs.obgnme==lst_grp,:].copy()
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            inc = bgobs.loc[bgobs.obsnme.str.startswith("cum"),:].copy()
+            inc.sort_values(by="time",inplace=True)
+            [ax.plot(inc.time,s_b_oe.loc[idx,inc.obsnme],"0.5", alpha=0.1) for idx in s_b_oe.index]
+            cgobs = c_lst_obs.loc[c_lst_obs.obgnme == lst_grp, :].copy()
+            inc = cgobs.loc[cgobs.obsnme.str.startswith("cum"), :].copy()
+            inc.sort_values(by="time", inplace=True)
+            [ax.plot(inc.time, c_oe.loc[idx, inc.obsnme], "b--",alpha=0.1) for idx in c_oe.index]
             ax.set_title(lst_grp)
             pdf.savefig()
             plt.close(fig)
@@ -1169,8 +1198,8 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
 
     with PdfPages(pname) as pdf:
         for ireal in range(100):
-            s_b_m_d = "monthly_model_files_master_{0}".format(ireal)
-            s_s_m_d = "seq_" + s_b_m_d
+            s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
+            s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
             if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
                 break
             try:
@@ -1216,7 +1245,7 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
 
 
                 ax = axes[0]
-                ax.set_title("A) batch formulation {0}, realization {1}".format(label_dict[ogname],c_oe.index[ireal]),loc="left")
+                ax.set_title("A) batch formulation {0}, replicate {1}".format(label_dict[ogname],c_oe.index[ireal]),loc="left")
 
 
                 [ax.plot(sgobs.time,s_b_oe_pr.loc[idx,sgobs.obsnme],"0.5",lw=0.01,alpha=0.5) for idx in s_b_oe_pr.index]
@@ -1245,7 +1274,7 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                                    alpha=0.5)
                 ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
                 ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
-                ax.set_title("B) sequential formulation {0}, realization {1}".format(label_dict[ogname], c_oe.index[ireal]),loc="left")
+                ax.set_title("B) sequential formulation {0}, replicate {1}".format(label_dict[ogname], c_oe.index[ireal]),loc="left")
                 #if "gage" not in ogname:
                 #    ax.set_ylim(30,ax.get_ylim()[1])
                 mn = 1.0e+10
@@ -1374,6 +1403,7 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None, include_est_states=
     for ireal in range(100):
         s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
+
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
             break
         try:
@@ -1648,8 +1678,12 @@ def sync_phase():
     shutil.copytree(s_d, t_s_d)
 
     for d in [t_c_d,t_s_d]:
-        rch_files = [f for f in os.listdir(d) if "rch_recharge" in f]
-        rch_files = {int(f.split(".")[1].split("_")[-1]):np.loadtxt(os.path.join(d,f)) * 0.75 for f in rch_files}
+        rch_file_list = [f for f in os.listdir(d) if "rch_recharge" in f]
+        rch_files = {}
+        for f in rch_file_list:
+            arr = np.loadtxt(os.path.join(d,f)) * 0.75
+            np.savetxt(os.path.join(d,f),arr,fmt="%15.6E")
+            rch_files[int(f.split(".")[1].split("_")[-1])] = arr
         keys = list(rch_files.keys())
         keys.sort()
         # calc the first sp recharge as the mean of the others
@@ -1742,7 +1776,7 @@ if __name__ == "__main__":
 
     #b_d = setup_interface("monthly_model_files")
     #b_d = "monthly_model_files_template"
-    #s_d = monthly_ies_to_da(b_d,include_sim_states=True)
+    #s_d = monthly_ies_to_da(b_d,include_sim_states=False)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
@@ -1753,11 +1787,11 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=40, num_replicates=50)
-    #plot_obs_v_sim2()
+    #compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True)
+    plot_obs_v_sim2(subdir="naive_50reals_eststates")
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True, include_est_states=True)
+    #plot_s_vs_s(summarize=True, include_est_states=False, subdir="naive_50reals_eststates")
     #plot_s_vs_s(summarize=True,post_iter=1,include_est_states=True)
 
     # invest()
