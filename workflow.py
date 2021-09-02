@@ -70,7 +70,7 @@ def clean_master_dirs():
 
 
 def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
-                         run_ies=True,run_da=True):
+                         run_ies=True,run_da=True,adj_init_states=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
@@ -134,6 +134,10 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
             da_pst.pestpp_options["ies_num_reals"] = num_reals
             da_pst.pestpp_options["ies_use_mda"] = False
             da_pst.pestpp_options["da_use_simulated_states"] = use_sim_states
+            if not adj_init_states:
+                par = da_pst.parameter_data
+                istate_pars = par.loc[par.parnme.str.startswith("direct_head"),"parnme"]
+                par.loc[istate_pars,"partrans"] = "fixed"
             da_pst.control_data.noptmax = 3
             da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
@@ -1407,8 +1411,8 @@ def plot_domain():
     plt.close("all")
 
 
-def plot_s_vs_s(summarize=False, subdir=".", post_iter=None, include_est_states=False):
-
+def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
+    include_est_states = False
     ognames = keep
     ognames.extend(forecast)
     label_dict = keep_dict
@@ -1846,15 +1850,15 @@ if __name__ == "__main__":
     #exit()
     #
     compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
-                         run_ies=True,run_da=False)
-    #plot_obs_v_sim2(subdir="naive_50reals_eststates")
+                         run_ies=False,run_da=True,adj_init_states=False)
+    plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True, include_est_states=False, subdir="naive_50reals_eststates")
-    #plot_s_vs_s(summarize=True,post_iter=1,include_est_states=True)
+    plot_s_vs_s(summarize=True
+    #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
-    clean_results("naive_50reals_eststates")
+    #clean_results("naive_50reals_eststates")
     exit()
 
     # BOOLEANS TO SELECT CODE BLOCKS BELOW
