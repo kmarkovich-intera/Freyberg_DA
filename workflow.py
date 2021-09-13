@@ -1469,11 +1469,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
     obs = s_s_pst.observation_data
     sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
     par = s_s_pst.parameter_data
-    sfpar = par.loc[pd.notna(par.state_par_link),:]
-    sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
-    #for v in ["k","i","j"]:
-    #    par.loc[:,v] = par.loc[:,v].apply(float)
-    #istate_par = par.loc[par.parnme.str.contains("")]
+    #sfpar = par.loc[pd.notna(par.state_par_link),:]
+    #sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
+
 
     if len(s_b_dict) == 0:
         raise Exception()
@@ -1572,30 +1570,30 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                                        alpha=0.5,s=size)
 
                     # the estimated states...
-                    s_s_pe_dict_pt = s_s_est_dict.get(ireal,None)
-                    if s_s_pe_dict_pt is not None and itime in s_s_pe_dict_pt:
-                        pe = s_s_pe_dict_pt[itime]
-                        pname = sobs_to_sipar[seq_name]
-                        simseq_name = sipar_to_sfpar[pname]
-                        if summarize:
-                            mn = pe.loc[:, simseq_name].mean()
-                            lq = pe.loc[:, simseq_name].quantile(0.05)
-                            uq = pe.loc[:, simseq_name].quantile(0.95)
-                            axes[0, 1].scatter(mn, cval,
-                                               marker="*", color="0.5", alpha=0.5,s=size*2)
-                            axes[0, 1].plot([lq, uq], [cval, cval],
-                                            color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
-
-                            axesall[0, 1].scatter(mn, cval,
-                                                  marker="*", color="0.5", alpha=0.5,s=size*2)
-                            axesall[0, 1].plot([lq, uq], [cval, cval],
-                                               color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
-
-                        else:
-                            axes[0,1].scatter(pe.loc[:, simseq_name],[cval for _ in range(pe.shape[0])], marker="*", color="0.5",
-                                       alpha=0.5,s=size*2)
-                            axesall[0,1].scatter(pe.loc[:, simseq_name], [cval for _ in range(pe.shape[0])], marker="*", color="0.5",
-                                       alpha=0.5,s=size*2)
+                    # s_s_pe_dict_pt = s_s_est_dict.get(ireal,None)
+                    # if s_s_pe_dict_pt is not None and itime in s_s_pe_dict_pt:
+                    #     pe = s_s_pe_dict_pt[itime]
+                    #     pname = sobs_to_sipar[seq_name]
+                    #     simseq_name = sipar_to_sfpar[pname]
+                    #     if summarize:
+                    #         mn = pe.loc[:, simseq_name].mean()
+                    #         lq = pe.loc[:, simseq_name].quantile(0.05)
+                    #         uq = pe.loc[:, simseq_name].quantile(0.95)
+                    #         axes[0, 1].scatter(mn, cval,
+                    #                            marker="*", color="0.5", alpha=0.5,s=size*2)
+                    #         axes[0, 1].plot([lq, uq], [cval, cval],
+                    #                         color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
+                    #
+                    #         axesall[0, 1].scatter(mn, cval,
+                    #                               marker="*", color="0.5", alpha=0.5,s=size*2)
+                    #         axesall[0, 1].plot([lq, uq], [cval, cval],
+                    #                            color="0.5", alpha=0.5, lw=lw,dashes=(1,1))
+                    #
+                    #     else:
+                    #         axes[0,1].scatter(pe.loc[:, simseq_name],[cval for _ in range(pe.shape[0])], marker="*", color="0.5",
+                    #                    alpha=0.5,s=size*2)
+                    #         axesall[0,1].scatter(pe.loc[:, simseq_name], [cval for _ in range(pe.shape[0])], marker="*", color="0.5",
+                    #                    alpha=0.5,s=size*2)
 
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
@@ -1849,12 +1847,12 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
-                         run_ies=False,run_da=True,adj_init_states=False)
+    #compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
+    #                     run_ies=False,run_da=True,adj_init_states=False)
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True
+    plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
