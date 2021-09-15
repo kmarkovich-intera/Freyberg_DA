@@ -482,7 +482,7 @@ def setup_interface(org_ws, num_reals=100):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws + "_template"
+    template_ws = org_ws.replace("_newstress","") + "_template"
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -653,6 +653,13 @@ def setup_interface(org_ws, num_reals=100):
     pf.pst.parameter_data.loc[first_wpar, "parlbnd"] = 1.0e-10
     pf.pst.parameter_data.loc[first_wpar, "parubnd"] = 1.0e-9
 
+    # fix the new stress well if present
+    new_wpar = par.loc[par.parnme.apply(lambda x: "wel_grid" in x and "idx0:0" in x),"parnme"]
+    pf.pst.parameter_data.loc[new_wpar, "partrans"] = "fixed"
+    pf.pst.parameter_data.loc[new_wpar, "parval1"] = 1.0
+    pf.pst.parameter_data.loc[new_wpar, "parlbnd"] = 0.999999
+    pf.pst.parameter_data.loc[new_wpar, "parubnd"] = 1.000001
+
     # draw from the prior and save the ensemble in binary format
     pe = pf.draw(num_reals, use_specsim=True)
     # replace the ic strt pars with the control file values
@@ -670,7 +677,7 @@ def setup_interface(org_ws, num_reals=100):
     # ident the obs-par state linkage
     obs = pst.observation_data
     state_obs = obs.loc[obs.obsnme.str.contains("arrobs_head"), :].copy()
-    state_par = par.loc[par.parnme.str.contains("direct_head"), :].copy()
+    state_par = par.loc[par.parnme.str.contains("d_head"), :].copy()
     for v in ["k", "i", "j"]:
         state_par.loc[:, v] = state_par.loc[:, v].apply(int)
         state_obs.loc[:, v] = state_obs.loc[:, v].apply(int)
@@ -729,7 +736,7 @@ def test_process_lst_file(d):
     return inc,cum
 
 
-def monthly_ies_to_da(org_d,include_sim_states=False):
+def monthly_ies_to_da(org_d,include_est_states=False):
     """convert the batch monthly model to sequential formulation"""
 
     # load the existing multi-stress period model
@@ -787,10 +794,6 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
-
-
-
-
     # save this for later!
     org_obs = pst.observation_data.copy()
 
@@ -812,7 +815,7 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
                 f.write(line)
         pst.add_observations(os.path.join(t_d, ins_name), pst_path=".")
 
-    if include_sim_states:
+    if include_est_states:
         # first add gw level sim state pars - just copy the "direct head" par template files
         ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
         for ic_tpl_file in ic_tpl_files:
@@ -820,8 +823,7 @@ def monthly_ies_to_da(org_d,include_sim_states=False):
             new_tpl = ic_tpl_file.replace(".txt.tpl",".est.txt.tpl")
             with open(os.path.join(t_d,new_tpl),'w') as f:
                 for line in lines:
-
-                    f.write(line.replace("direct","est_direct"))
+                    f.write(line.replace("d_head","est_d_head"))
             df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
             pst.parameter_data.loc[df.parnme,"parval1"] = 40
             pst.parameter_data.loc[df.parnme, "parubnd"] = 60
@@ -1827,16 +1829,76 @@ def clean_results(subdir="."):
 
 
 
+def add_new_stress():
 
+    m_lrc = (1,25,5)
+    m_start_sp = 10
+    d_start_sp = m_start_sp * 30
+    d_lrc = (m_lrc[0],m_lrc[1]*3,m_lrc[2]*3)
+    new_flux = -450
+    d_d_org = "daily_model_files"
+    d_d_new = d_d_org+"_newstress"
+    if os.path.exists(d_d_new):
+        shutil.rmtree(d_d_new)
+    shutil.copytree(d_d_org,d_d_new)
+
+    wel_files = [f for f in os.listdir(d_d_new) if ".wel_stress_period" in f and f.endswith(".txt")]
+    for wel_file in wel_files:
+        sp = int(wel_file.split(".")[1].split('_')[-1])
+        df = pd.read_csv(os.path.join(d_d_new,wel_file),header=None,names=["l","r","c","flux"],delim_whitespace=True)
+        df.loc[6,["l","r","c"]] = [d_lrc[0],d_lrc[1],d_lrc[2]]
+        if sp < d_start_sp:
+            df.loc[6,"flux"] = 0.0
+        else:
+            df.loc[6, "flux"] = new_flux
+        df = df.astype({"l": int, "r": int, "c": int})
+        print(df.dtypes)
+        df.to_csv(os.path.join(d_d_new,wel_file),header=False,index=False,sep=" ")
+    wel_file = os.path.join(d_d_new,"freyberg6.wel")
+    lines = open(wel_file,'r').readlines()
+    with open(wel_file,'w') as f:
+        for line in lines:
+            if "maxbound" in line.lower():
+                line = "   maxbound  7\n"
+            f.write(line)
+    pyemu.os_utils.run("mf6",cwd=d_d_new)
+
+
+    m_d_org = "monthly_model_files"
+    m_d_new = m_d_org+"_newstress"
+    if os.path.exists(m_d_new):
+        shutil.rmtree(m_d_new)
+    shutil.copytree(m_d_org,m_d_new)
+
+    wel_files = [f for f in os.listdir(m_d_new) if ".wel_stress_period" in f and f.endswith(".txt")]
+    for wel_file in wel_files:
+        sp = int(wel_file.split(".")[1].split('_')[-1])
+        df = pd.read_csv(os.path.join(m_d_new,wel_file),header=None,names=["l","r","c","flux"],delim_whitespace=True)
+        df.loc[6,["l","r","c"]] = [m_lrc[0],m_lrc[1],m_lrc[2]]
+        if sp < m_start_sp:
+            df.loc[6,"flux"] = 0.0
+        else:
+            df.loc[6, "flux"] = new_flux
+        df = df.astype({"l": int, "r": int, "c": int})
+        print(df.dtypes)
+        df.to_csv(os.path.join(m_d_new,wel_file),header=False,index=False,sep=" ")
+    wel_file = os.path.join(m_d_new,"freyberg6.wel")
+    lines = open(wel_file,'r').readlines()
+    with open(wel_file,'w') as f:
+        for line in lines:
+            if "maxbound" in line.lower():
+                line = "   maxbound  7\n"
+            f.write(line)
+    pyemu.os_utils.run("mf6",cwd=m_d_new)
 
 
 if __name__ == "__main__":
 
     #sync_phase()
+    #add_new_stress()
+    #b_d = setup_interface("monthly_model_files_newstress")
+    #s_d = monthly_ies_to_da(b_d,include_est_states=True)
 
-    #b_d = setup_interface("monthly_model_files")
-    #b_d = "monthly_model_files_template"
-    #s_d = monthly_ies_to_da(b_d,include_sim_states=False)
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
     # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
     # #exit()
@@ -1844,15 +1906,15 @@ if __name__ == "__main__":
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #c_d = setup_interface("daily_model_files")
     #m_c_d = run_complex_prior_mc(c_d)
-    #plot_prior_mc()
+    plot_prior_mc()
     #exit()
     #
     #compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
     #                     run_ies=False,run_da=True,adj_init_states=False)
-    plot_obs_v_sim2()
+    #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
