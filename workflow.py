@@ -42,6 +42,9 @@ forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
+keep_sngl_lyr = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:0_i:2_j:9', 'arrobs_head_k:0_i:33_j:7', 'sfr_usecol:gage_1']
+sngl_lyr_dct = {k:l for k,l in zip(keep_sngl_lyr,keep)}
+
 
 def clean_master_dirs():
     for i in range(100):
@@ -72,7 +75,7 @@ def clean_master_dirs():
 def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
                          run_ies=True,run_da=True,adj_init_states=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
-    bat_dir = os.path.join('monthly_model_files_template')
+    bat_dir = os.path.join('monthly_model_files_1lyr_template')
     seq_dir = "seq_" + bat_dir
     for ireal in range(num_replicates):
 
@@ -160,7 +163,9 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
 
 def run_complex_prior_mc(c_d):
     m_c_d = c_d.replace("template", "master_prior")
-    pyemu.os_utils.start_workers(c_d, "pestpp-ies", "freyberg.pst", num_workers=10, worker_root=".",
+    # pyemu.os_utils.start_workers(c_d, "pestpp-ies", "freyberg.pst", num_workers=10, worker_root=".",
+    #                              master_dir=m_c_d)
+    pyemu.os_utils.start_workers(c_d, "pestpp-ies", "freyberg.pst", num_workers=4, worker_root=".",
                                  master_dir=m_c_d)
     return m_c_d
 
@@ -535,7 +540,10 @@ def setup_interface(org_ws, num_reals=100):
     pf.extra_py_imports.append('flopy')
 
     # use the idomain array for masking parameter locations
-    ib = m.dis.idomain[0].array
+    try:
+        ib = m.dis.idomain[0].array
+    except:
+        ib = m.dis.idomain[0]
 
     # define a dict that contains file name tags and lower/upper bound information
     tags = {"npf_k_": [0.2, 5.], "npf_k33_": [.2, 5], "sto_ss": [.5, 2], "sto_sy": [.8, 1.2],
@@ -554,9 +562,11 @@ def setup_interface(org_ws, num_reals=100):
             continue
 
         # make sure each array file in nrow X ncol dimensions (not wrapped)
-        for arr_file in arr_files:
-            arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
-            np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+        # for arr_file in arr_files:
+        #     print(ib.shape)
+        #     arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+        #     print(arr)
+        #     np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
 
         # if this is the recharge tag
         if "rch" in tag:
@@ -819,11 +829,12 @@ def monthly_ies_to_da(org_d,include_est_states=False):
         # first add gw level sim state pars - just copy the "direct head" par template files
         ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
         for ic_tpl_file in ic_tpl_files:
+            print(ic_tpl_file)
             lines = open(os.path.join(t_d,ic_tpl_file)).readlines()
             new_tpl = ic_tpl_file.replace(".txt.tpl",".est.txt.tpl")
             with open(os.path.join(t_d,new_tpl),'w') as f:
                 for line in lines:
-                    f.write(line.replace("d_head","est_d_head"))
+                    f.write(line.replace("direct_head","est_d_head"))
             df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
             pst.parameter_data.loc[df.parnme,"parval1"] = 40
             pst.parameter_data.loc[df.parnme, "parubnd"] = 60
@@ -1103,19 +1114,30 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
     """
 
     # load the daily model prior MC obs ensemble and get the simulated values
-    coe = pd.read_csv(os.path.join(c_d,"freyberg.0.obs.csv"),index_col=0)
+    # coe = pd.read_csv(os.path.join(c_d,"freyberg.0.obs.csv"),index_col=0)
+    coe = pd.read_csv(os.path.join(c_d, "freyberg.0.obs.csv"))
+    coe.set_index('real_name')
     cvals = coe.loc[real_idx,:]
 
     # load the batch monthly model control file
     bpst = pyemu.Pst(os.path.join(b_d,"freyberg.pst"))
     obs = bpst.observation_data
+
+    #need to do some trickery for complex gw obs in layer 3 to pretend to be in layer 1
+    cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:2_j:9', 'hds_usecol:arrobs_head_k:3_i:2_j:9') for item in cvals.index]
+    cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:33_j:7', 'hds_usecol:arrobs_head_k:3_i:33_j:7') for item in cvals.index]
+    cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:2_j:9', 'hds_usecol:arrobs_head_k:0_i:2_j:9') for item in
+                   cvals.index]
+    cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:33_j:7', 'hds_usecol:arrobs_head_k:0_i:33_j:7') for item
+                   in cvals.index]
     # assign all common observations
     obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
 
     # set some weights - only the first 12 months (not counting spin up time)
     # just picked weights that seemed to balance-ish the one realization I looked at...
     obs.loc[:,"weight"] = 0.0
-    for k in keep:
+    # for k in keep:
+    for k in keep_sngl_lyr:
         kobs = obs.loc[obs.obsnme.str.contains(k),:].copy()
         kobs.loc[:,"time"] = kobs.time.apply(float)
         kobs.sort_values(by="time",inplace=True)
@@ -1123,8 +1145,11 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             obs.loc[kobs.obsnme[1:13], "weight"] = 0.005
         else:
             obs.loc[kobs.obsnme[1:13],"weight"] = 2.0
+    try:
+        assert bpst.nnz_obs == 48
+    except:
+        assert bpst.nnz_obs == 24 #add this in for the single layer dealio
 
-    assert bpst.nnz_obs == 48
     # setup a template dir for this complex model realization
     t_d = b_d + "_{0}".format(real_idx)
     if os.path.exists(t_d):
@@ -1142,15 +1167,13 @@ def map_simple_bat_to_seq(b_d,s_d):
 
 
     """
-
     org_sim = flopy.mf6.MFSimulation.load(sim_ws=b_d)
 
     # load the batch control file
     bpst = pyemu.Pst(os.path.join(b_d, "freyberg.pst"))
     bobs = bpst.observation_data
-
     # work on the sequential obs names - yuck
-    seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names ]
+    seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names]
     seq_names = [n+"_time:10000.0" if "sfr" in n else n for n in seq_names]
     seq_names = set(seq_names)
     assert len(seq_names) == len(keep)
@@ -1689,7 +1712,8 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
 
 def sync_phase():
     c_d = "daily_model_files_org"
-    s_d = "monthly_model_files_org"
+    # s_d = "monthly_model_files_org"
+    s_d = "monthly_model_files_1lyr_org"
 
     t_c_d = c_d.replace("_org","")
     t_s_d = s_d.replace("_org","")
@@ -1864,7 +1888,8 @@ def add_new_stress():
     pyemu.os_utils.run("mf6",cwd=d_d_new)
 
 
-    m_d_org = "monthly_model_files"
+    # m_d_org = "monthly_model_files"
+    m_d_org = "monthly_model_files_1lyr"
     m_d_new = m_d_org+"_newstress"
     if os.path.exists(m_d_new):
         shutil.rmtree(m_d_new)
@@ -1894,23 +1919,26 @@ def add_new_stress():
 
 if __name__ == "__main__":
 
-    #sync_phase()
-    #add_new_stress()
-    #b_d = setup_interface("monthly_model_files_newstress")
-    #s_d = monthly_ies_to_da(b_d,include_est_states=True)
+    # sync_phase()
+    # add_new_stress()
+    #
+    # c_d = setup_interface("daily_model_files")
+    # m_c_d = run_complex_prior_mc(c_d)
 
-    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,1)
-    # #s_d = map_simple_bat_to_seq(b_d,"seq_"+b_d)
-    # #exit()
+    # b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    # s_d = monthly_ies_to_da(b_d,include_est_states=True)
+    #
+    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_1lyr_template")
+    # exit()
 
-    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    #c_d = setup_interface("daily_model_files")
-    #m_c_d = run_complex_prior_mc(c_d)
-    plot_prior_mc()
+    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    # plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=50, num_replicates=50,num_reals=50,use_sim_states=True,
-    #                     run_ies=False,run_da=True,adj_init_states=False)
+    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=False,
+                        run_ies=True,run_da=True,adj_init_states=False)
+    exit()
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
