@@ -1057,6 +1057,7 @@ def plot_prior_mc():
             ax = axes[iax]
             cgobs = c_pst.observation_data.loc[c_pst.observation_data.obsnme.str.contains(ogname),:].copy()
             sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+            k0ogname = ogname
             if sgobs.shape[0] == 0:
                 k0ogname = ogname.replace("k:2","k:0")
                 sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname), :].copy()
@@ -1069,9 +1070,9 @@ def plot_prior_mc():
 
 
 
-            seq_name = ogname
-            if "arrobs" not in ogname:
-                seq_name = ogname + "_time:10000.0"
+            seq_name = k0ogname
+            if "arrobs" not in k0ogname:
+                seq_name = k0ogname + "_time:10000.0"
             print(seq_name)
             for itime,time in enumerate(sgobs.time):
                 if itime in s_s_oe_dict:
