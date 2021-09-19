@@ -1057,6 +1057,9 @@ def plot_prior_mc():
             ax = axes[iax]
             cgobs = c_pst.observation_data.loc[c_pst.observation_data.obsnme.str.contains(ogname),:].copy()
             sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+            if sgobs.shape[0] == 0:
+                k0ogname = ogname.replace("k:2","k:0")
+                sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname), :].copy()
             sgobs.loc[:,"time"] = sgobs.time.apply(float)
             cgobs.loc[:, "time"] = cgobs.time.apply(float)
 
@@ -1919,8 +1922,8 @@ def add_new_stress(m_d_org = "monthly_model_files"):
 
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr")
+    #sync_phase(s_d = "monthly_model_files_1lyr_org")
+    #add_new_stress(m_d_org = "monthly_model_files_1lyr")
     #
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
@@ -1935,11 +1938,11 @@ if __name__ == "__main__":
     #m_c_d = run_complex_prior_mc(c_d,num_workers=14)
 
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    #plot_prior_mc()
+    plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
-                        run_ies=True,run_da=True,adj_init_states=True)
+    #compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
+    #                    run_ies=True,run_da=True,adj_init_states=True)
     #exit()
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
