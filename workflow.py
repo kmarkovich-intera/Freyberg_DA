@@ -1127,22 +1127,46 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
     # load the batch monthly model control file
     bpst = pyemu.Pst(os.path.join(b_d,"freyberg.pst"))
     obs = bpst.observation_data
+    is_1_lay = True
+    if True in [True if "k:2" in o else False for o in bpst.obs_names]:
+        is_1_lay = False
 
     #need to do some trickery for complex gw obs in layer 3 to pretend to be in layer 1
-    cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:2_j:9', 'hds_usecol:arrobs_head_k:3_i:2_j:9') for item in cvals.index]
-    cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:33_j:7', 'hds_usecol:arrobs_head_k:3_i:33_j:7') for item in cvals.index]
-    cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:2_j:9', 'hds_usecol:arrobs_head_k:0_i:2_j:9') for item in
-                   cvals.index]
-    cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:33_j:7', 'hds_usecol:arrobs_head_k:0_i:33_j:7') for item
-                   in cvals.index]
+    #cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:2_j:9', 'hds_usecol:arrobs_head_k:2_i:2_j:9') for item in cvals.index]
+    #cvals.index = [item.replace('hds_usecol:arrobs_head_k:0_i:33_j:7', 'hds_usecol:arrobs_head_k:2_i:33_j:7') for item in cvals.index]
+    #cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:2_j:9', 'hds_usecol:arrobs_head_k:0_i:2_j:9') for item in
+    #               cvals.index]
+    #cvals.index = [item.replace('hds_usecol:arrobs_head_k:2_i:33_j:7', 'hds_usecol:arrobs_head_k:0_i:33_j:7') for item
+    #               in cvals.index]
     # assign all common observations
+    if is_1_lay:
+        #idx = cvals.index.copy()
+        for k in keep:
+            if "k:2" not in k:
+                continue
+            d = cvals.index.map(lambda x: k not in x)
+            cvals = cvals.loc[d]
+            kk = k.replace("k:2","k:0")
+            cvals.index = cvals.index.map(lambda x: x.replace("k:2","k:0") if kk in x else x)
+
+        for k in forecast:
+            if "k:2" not in k:
+                continue
+            d = cvals.index.map(lambda x: k not in x)
+            cvals = cvals.loc[d]
+            kk = k.replace("k:2", "k:0")
+            cvals.index = cvals.index.map(lambda x: x.replace("k:2", "k:0") if kk in x else x)
     obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
+    assert obs.obsval.shape[0] == obs.obsval.dropna().shape[0]
+    assert cvals.loc[bpst.obs_names].shape[0] == cvals.loc[bpst.obs_names].dropna().shape[0]
 
     # set some weights - only the first 12 months (not counting spin up time)
     # just picked weights that seemed to balance-ish the one realization I looked at...
     obs.loc[:,"weight"] = 0.0
-    # for k in keep:
-    for k in keep_sngl_lyr:
+    for k in keep.copy():
+    #for k in keep_sngl_lyr:
+        if is_1_lay:
+            k = k.replace("k:2","k:0")
         kobs = obs.loc[obs.obsnme.str.contains(k),:].copy()
         kobs.loc[:,"time"] = kobs.time.apply(float)
         kobs.sort_values(by="time",inplace=True)
@@ -1150,10 +1174,10 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             obs.loc[kobs.obsnme[1:13], "weight"] = 0.005
         else:
             obs.loc[kobs.obsnme[1:13],"weight"] = 2.0
-    try:
+    if is_1_lay:
+        assert bpst.nnz_obs == 24
+    else:
         assert bpst.nnz_obs == 48
-    except:
-        assert bpst.nnz_obs == 24 #add this in for the single layer dealio
 
     # setup a template dir for this complex model realization
     t_d = b_d + "_{0}".format(real_idx)
@@ -1939,11 +1963,11 @@ if __name__ == "__main__":
     #m_c_d = run_complex_prior_mc(c_d,num_workers=14)
 
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    plot_prior_mc()
+    #plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
-    #                    run_ies=True,run_da=True,adj_init_states=True)
+    compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
+                        run_ies=True,run_da=True,adj_init_states=True)
     #exit()
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
