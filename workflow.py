@@ -1174,10 +1174,8 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             obs.loc[kobs.obsnme[1:13], "weight"] = 0.005
         else:
             obs.loc[kobs.obsnme[1:13],"weight"] = 2.0
-    if is_1_lay:
-        assert bpst.nnz_obs == 24
-    else:
-        assert bpst.nnz_obs == 48
+
+    assert bpst.nnz_obs == 48,bpst.nnz_obs
 
     # setup a template dir for this complex model realization
     t_d = b_d + "_{0}".format(real_idx)
