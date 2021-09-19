@@ -75,7 +75,7 @@ def clean_master_dirs():
 def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
                          run_ies=True,run_da=True,adj_init_states=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
-    bat_dir = os.path.join('monthly_model_files_1lyr_template')
+    bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
     for ireal in range(num_replicates):
 
@@ -477,6 +477,8 @@ def setup_interface(org_ws, num_reals=100):
     if os.path.exists(tmp_ws):
         shutil.rmtree(tmp_ws)
     shutil.copytree(org_ws, tmp_ws)
+    #to make sure we get a consistent version of pyemu...
+    shutil.copytree("pyemu",os.path.join(tmp_ws,"pyemu"))
     pyemu.os_utils.run("mf6", cwd=tmp_ws)
 
     # load the mf6 model with flopy to get the spatial reference
@@ -487,7 +489,7 @@ def setup_interface(org_ws, num_reals=100):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws.replace("_newstress","") + "_template"
+    template_ws = org_ws.replace("_newstress","").replace("_1lyr","") + "_template"
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -834,10 +836,11 @@ def monthly_ies_to_da(org_d,include_est_states=False):
             new_tpl = ic_tpl_file.replace(".txt.tpl",".est.txt.tpl")
             with open(os.path.join(t_d,new_tpl),'w') as f:
                 for line in lines:
-                    f.write(line.replace("direct_head","est_d_head"))
+                    f.write(line.replace("d_head","est_d_head"))
             df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
             pst.parameter_data.loc[df.parnme,"parval1"] = 40
             pst.parameter_data.loc[df.parnme, "parubnd"] = 60
+            pst.parameter_data.loc[df.parnme, "parlbnd"] = 20
             pst.parameter_data.loc[df.parnme, "parlbnd"] = 20
 
         # now add double fake pars for the forecasts just so they are getting
@@ -1710,10 +1713,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             pdf.savefig(figall)
             plt.close(figall)
 
-def sync_phase():
+def sync_phase(s_d = "monthly_model_files_org"):
     c_d = "daily_model_files_org"
-    # s_d = "monthly_model_files_org"
-    s_d = "monthly_model_files_1lyr_org"
+
 
     t_c_d = c_d.replace("_org","")
     t_s_d = s_d.replace("_org","")
@@ -1853,13 +1855,13 @@ def clean_results(subdir="."):
 
 
 
-def add_new_stress():
+def add_new_stress(m_d_org = "monthly_model_files"):
 
     m_lrc = (1,25,5)
-    m_start_sp = 10
+    m_start_sp = 12
     d_start_sp = m_start_sp * 30
     d_lrc = (m_lrc[0],m_lrc[1]*3,m_lrc[2]*3)
-    new_flux = -450
+    new_flux = -550
     d_d_org = "daily_model_files"
     d_d_new = d_d_org+"_newstress"
     if os.path.exists(d_d_new):
@@ -1889,7 +1891,7 @@ def add_new_stress():
 
 
     # m_d_org = "monthly_model_files"
-    m_d_org = "monthly_model_files_1lyr"
+
     m_d_new = m_d_org+"_newstress"
     if os.path.exists(m_d_new):
         shutil.rmtree(m_d_new)
@@ -1919,26 +1921,28 @@ def add_new_stress():
 
 if __name__ == "__main__":
 
-    # sync_phase()
-    # add_new_stress()
+    sync_phase(s_d = "monthly_model_files_1lyr_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr")
     #
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    # b_d = setup_interface("monthly_model_files_1lyr_newstress")
-    # s_d = monthly_ies_to_da(b_d,include_est_states=True)
+    b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    s_d = monthly_ies_to_da(b_d,include_est_states=True)
     #
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_1lyr_template")
     # exit()
+    c_d = setup_interface("daily_model_files")
+    m_c_d = run_complex_prior_mc(c_d)
 
-    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    # plot_prior_mc()
+    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=False,
-                        run_ies=True,run_da=True,adj_init_states=False)
-    exit()
+    #compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=False,
+    #                    run_ies=True,run_da=True,adj_init_states=False)
+    #exit()
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
