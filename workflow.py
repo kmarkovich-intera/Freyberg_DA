@@ -1307,10 +1307,17 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
             label_dict = keep_dict.copy()
             label_dict.update(forecast_dict)
 
+            is_1_lay = True
+            if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+                is_1_lay = False
+
             for ogname in ognames:
+                k0name = ogname
+                if is_1_lay:
+                    k0ogname = ogname.replace("k:2","k:0")
                 fig, axes = plt.subplots(2, 1, figsize=(8, 8))
                 cgobs = cobs.loc[cobs.obsnme.str.contains(ogname),:].copy()
-                sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+                sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname),:].copy()
 
                 sgobs.loc[:,"time"] = sgobs.time.apply(float)
                 cgobs.loc[:, "time"] = cgobs.time.apply(float)
@@ -1331,9 +1338,9 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
                 ax = axes[1]
 
-                seq_name = ogname
-                if "arrobs" not in ogname:
-                    seq_name = ogname + "_time:10000.0"
+                seq_name = k0ogname
+                if "arrobs" not in k0ogname:
+                    seq_name = k0ogname + "_time:10000.0"
                 print(ireal,seq_name)
                 for itime,time in enumerate(sgobs.time):
                     #itime += 1
@@ -1537,9 +1544,18 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
     if post_iter is not None:
         pname = os.path.join(subdir,"s_vs_s_postiter_{0}.pdf".format(post_iter))
 
+    is_1_lay = True
+    if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+        is_1_lay = False
+
+
     with PdfPages(pname) as pdf:
         for ogname in ognames:
-            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(ogname),:].copy()
+
+            k0ogname = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2","k:0")
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname),:].copy()
             sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             sgobs.sort_values(by="time", inplace=True)
@@ -1550,7 +1566,7 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                 for ireal in ireals:
                     s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
                     sbobs = s_b_pst.observation_data
-                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(ogname), :].copy()
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
 
                     s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
 
@@ -1595,9 +1611,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                         axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
                                    color="b",alpha=0.5,s=size)
 
-                    seq_name = ogname
-                    if "arrobs" not in ogname:
-                        seq_name = ogname + "_time:10000.0"
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
 
                     if itime in s_s_oe_dict_pr:
                         oe = s_s_oe_dict_pr[itime]
@@ -1964,13 +1980,13 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
-                        run_ies=True,run_da=True,adj_init_states=True)
+    #compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
+    #                    run_ies=True,run_da=True,adj_init_states=True)
     #exit()
-    #plot_obs_v_sim2()
+    plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
