@@ -1943,17 +1943,77 @@ def add_new_stress(m_d_org = "monthly_model_files"):
     pyemu.os_utils.run("mf6",cwd=m_d_new)
 
 
+def make_muted_recharge(s_d = 'monthly_model_files_1lyr_org',c_d = 'daily_model_files_org'):
+    s_d_new = s_d.replace('org', '_muted_rch')
+    if os.path.exists(s_d_new):
+        shutil.rmtree(s_d_new)
+    shutil.copytree(s_d, s_d_new)
+
+    #make df of daily model recharge by daily timestep
+    c_sim = flopy.mf6.MFSimulation.load(sim_ws = c_d)
+    sdts_cmplx = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(c_sim.tdis.perioddata.array["perlen"]),unit='d')
+
+    sim = flopy.mf6.MFSimulation.load(sim_ws = s_d)
+    sdts_smpl = pd.to_datetime("1-1-1900") + pd.to_timedelta(np.cumsum(sim.tdis.perioddata.array["perlen"]),unit='d')
+
+    m=0
+    rch = pd.DataFrame(columns=['rch', 'simday'])
+    rch_files = [f for f in os.listdir(c_d) if ".rch_recharge" in f and f.endswith(".txt")]
+    for rch_file in rch_files:
+        day = int(rch_file.split(".")[1].split('_')[-1])
+        df = pd.read_csv(os.path.join(c_d,rch_file),header=None,delim_whitespace=True)
+        rch.loc[m,'rch'] = df.iloc[0,0]
+        rch.loc[m, 'simday'] = sdts_cmplx[day - 1]
+        m+=1
+    rch = rch.sort_values(by = 'simday').reset_index()
+
+    rch_df = pd.DataFrame(columns = ['rch_avg'])
+    for sp in range(len(sdts_smpl)-1):
+        rch_avg = 0
+        for day in range(1,len(rch)):
+            if rch.simday[day] > sdts_smpl[sp] and rch.simday[day] <= sdts_smpl[sp + 1]:
+                rch_avg += rch.rch[day]
+        rch_df.loc[sp,'rch_avg'] = rch_avg
+
+    rch_df = pd.concat([rch_df, rch_df])
+    rch_df = rch_df.reset_index(drop='True')
+
+    smooth_data = rch_df.rolling(window=9).mean()
+    smooth_data = smooth_data.dropna().reset_index(drop = 'True')
+    smooth_data = smooth_data[8:32].reset_index(drop = 'True')
+    rch_df = rch_df[0:24]
+    plt.plot(smooth_data, '*')
+    plt.plot(rch_df)
+    plt.show()
+
+    rch_df = smooth_data
+    rch_df.loc[-1] = rch_df.mean()
+    rch_df.index = rch_df.index + 1  # shifting index
+    rch_df.sort_index(inplace=True)
+
+    rch_files = [f for f in os.listdir(s_d) if ".rch_recharge" in f and f.endswith(".txt")]
+    for rch_file in rch_files:
+        sp = int(rch_file.split(".")[1].split('_')[-1])
+        df = pd.read_csv(os.path.join(s_d,rch_file),header=None,delim_whitespace=True)
+        for row in range(40):
+            for col in range(20):
+                df[row,col] = rch_df.iloc[sp-1]
+        df.to_csv(os.path.join(s_d_new, rch_file), header=False, index=False, sep=" ")
+
+
 if __name__ == "__main__":
 
-    #sync_phase(s_d = "monthly_model_files_1lyr_org")
+    # sync_phase(s_d = "monthly_model_files_1lyr_org")
     #add_new_stress(m_d_org = "monthly_model_files_1lyr")
-    #
+    make_muted_recharge()
+    exit()
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
     #b_d = setup_interface("monthly_model_files_1lyr_newstress")
     #s_d = monthly_ies_to_da(b_d,include_est_states=True)
-    #
+
+
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_1lyr_template")
     # exit()
