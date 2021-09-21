@@ -487,7 +487,7 @@ def setup_interface(org_ws, num_reals=100):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws.replace("_newstress","").replace("_1lyr","") + "_template"
+    template_ws = org_ws.replace("_newstress","").replace("_1lyr","").replace("_muted_rch","") + "_template"
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -1960,7 +1960,7 @@ def add_new_stress(m_d_org = "monthly_model_files"):
 
 
 def make_muted_recharge(s_d = 'monthly_model_files_1lyr_org',c_d = 'daily_model_files_org'):
-    s_d_new = s_d.replace('org', '_muted_rch')
+    s_d_new = s_d + '_muted_rch'
     if os.path.exists(s_d_new):
         shutil.rmtree(s_d_new)
     shutil.copytree(s_d, s_d_new)
@@ -2019,14 +2019,15 @@ def make_muted_recharge(s_d = 'monthly_model_files_1lyr_org',c_d = 'daily_model_
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_org")
+    #sync_phase(s_d = "monthly_model_files_1lyr_org")
     #add_new_stress(m_d_org = "monthly_model_files_1lyr")
-    make_muted_recharge()
-    exit()
+    #make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
+
+    #exit()
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    #b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    #b_d = setup_interface("monthly_model_files_1lyr_newstress_muted_rch")
     #s_d = monthly_ies_to_da(b_d,include_est_states=True)
 
 
