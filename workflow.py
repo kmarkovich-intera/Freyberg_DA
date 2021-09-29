@@ -2059,25 +2059,68 @@ def reduce_simple_forcing_pars(t_d):
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
 
+def reduce_to_layer_pars(t_d):
+    pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
+    pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(t_d,"prior.jcb"))
+    par = pst.parameter_data
+    # fix all grid and pilot point pars
+    gr_par = par.loc[par.apply(lambda x: "gr" in x.parnme and x.partrans != "fixed",axis=1),"parnme"]
+    par.loc[gr_par,"partrans"] = "fixed"
+    pe.loc[:,gr_par] = 1.0
+
+    pp_par = par.loc[par.apply(lambda x: "pp" in x.parnme and x.partrans != "fixed",axis=1),"parnme"]
+    par.loc[pp_par,"partrans"] = "fixed"
+    pe.loc[:,pp_par] = 1.0
+
+    # fix all adjustable grid wel pars
+    grwel_par = par.loc[par.parnme.str.startswith("wel_grid"),"parnme"]
+    pe.loc[:,grwel_par] = 1.0
+    par.loc[grwel_par,"partrans"] = "fixed"
+
+    # grrch_par = par.loc[par.parnme.str.startswith("m_rch_gr"),"parnme"]
+    # par.loc[grrch_par,"partrans"] = "fixed"
+    # pe.loc[:,grrch_par] = 1.0
+    # crch_par = par.loc[par.parnme.str.startswith("d_const_rch"),:].copy()
+    # crch_par.loc[:,"sp"] = crch_par.parnme.apply(lambda x: int(x.split('_')[4]))
+
+    #tie_crch_par = crch_par.loc[crch_par.sp.apply(lambda x: x not in [1,2]),"parnme"]
+    #tie_crch_par = crch_par.loc[crch_par.sp != 1,"parnme"]
+    # tie_crch_par = crch_par.parnme
+    # val = crch_par.loc[tie_crch_par,"parval1"].mean()
+    # #pe.drop(labels=tie_crch_par,axis=1,inplace=True)
+    # pe.loc[:,tie_crch_par] = val
+    # par.loc[tie_crch_par,"partrans"] = "fixed"
+    #par.loc[tie_crch_par, "partied"] = "d_const_rch_recharge_2_cn_inst:0"
+
+    pe.to_binary(os.path.join(t_d, "prior_reduced.jcb"))
+    pst.pestpp_options["ies_par_en"] = "prior_reduced.jcb"
+    pst.control_data.noptmax = -2
+    pst.write(os.path.join(t_d,"test.pst"),version=2)
+    pyemu.os_utils.run("pestpp-ies test.pst",cwd=t_d)
+
+    pst.control_data.noptmax = -1
+    pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
+
 
 if __name__ == "__main__":
 
-    #sync_phase(s_d = "monthly_model_files_1lyr_org")
-    #add_new_stress(m_d_org = "monthly_model_files_1lyr")
+    sync_phase(s_d = "monthly_model_files_1lyr_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr")
     #make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
 
     #exit()
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    #b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    b_d = setup_interface("monthly_model_files_1lyr_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
-    #s_d = monthly_ies_to_da(b_d,include_est_states=False)
-    #exit()
-
-    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_1lyr_template")
+    reduce_to_layer_pars("monthly_model_files_template")
+    s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # exit()
+
+    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    exit()
     #c_d = setup_interface("daily_model_files")
     #m_c_d = run_complex_prior_mc(c_d,num_workers=14)
 
@@ -2085,7 +2128,7 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
+    # compare_mf6_freyberg(num_workers=8, num_replicates=4,num_reals=50,use_sim_states=True,
     #                    run_ies=True,run_da=True,adj_init_states=True)
     #exit()
     plot_obs_v_sim2()
