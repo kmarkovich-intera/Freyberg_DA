@@ -2057,7 +2057,7 @@ def reduce_simple_forcing_pars(t_d):
     pyemu.os_utils.run("pestpp-ies test.pst",cwd=t_d)
 
     pst.control_data.noptmax = -1
-    pst.write(os.path.join(t_d,"freyberg.pst"))
+    pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
 
 
 if __name__ == "__main__":
@@ -2070,10 +2070,10 @@ if __name__ == "__main__":
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    b_d = setup_interface("monthly_model_files_1lyr_newstress")
-    reduce_simple_forcing_pars("monthly_model_files_template")
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
-    exit()
+    #b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    #reduce_simple_forcing_pars("monthly_model_files_template")
+    #s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    #exit()
 
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_1lyr_template")
@@ -2081,17 +2081,17 @@ if __name__ == "__main__":
     #c_d = setup_interface("daily_model_files")
     #m_c_d = run_complex_prior_mc(c_d,num_workers=14)
 
-    m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    plot_prior_mc()
+    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
+    #plot_prior_mc()
     #exit()
     #
     #compare_mf6_freyberg(num_workers=40, num_replicates=100,num_reals=50,use_sim_states=True,
     #                    run_ies=True,run_da=True,adj_init_states=True)
     #exit()
-    #plot_obs_v_sim2()
+    plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
