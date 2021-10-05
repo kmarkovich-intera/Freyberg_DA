@@ -487,7 +487,7 @@ def setup_interface(org_ws, num_reals=100):
     redis_fac = m.dis.nrow.data / 40
 
     # where the pest interface will be constructed
-    template_ws = org_ws.replace("_newstress","").replace("_1lyr","").replace("_muted_rch","") + "_template"
+    template_ws = org_ws.replace("_newstress","").replace("_1lyr","").replace("_trnsprt","").replace("_muted_rch","") + "_template"
 
     # instantiate PstFrom object
     pf = pyemu.utils.PstFrom(original_d=tmp_ws, new_d=template_ws,
@@ -520,6 +520,16 @@ def setup_interface(org_ws, num_reals=100):
     for k, fname in enumerate(fnames):
         prefix = "head_k:{0}".format(k)
         pf.add_observations(fname, prefix=prefix, obsgp=prefix)
+
+    # write a really simple instruction file to read the MODPATH end point file
+    # out_file = "freyberg6_mp_forward.mpend"
+    # ins_file = out_file + ".ins"
+    # with open(os.path.join(pst_helper.new_model_ws, ins_file), 'w') as f:
+    #     f.write("pif ~\n")
+    #     f.write("l7 w w w !part_status! w w !part_time!\n")
+    #
+    # #add observations for particle endpoints
+    # pf.add_py_function("workflow.py", "postprocess_mp7_ep_data()", is_pre_cmd=False)
 
     # the geostruct object for grid-scale parameters
     grid_v = pyemu.geostats.ExpVario(contribution=1.0, a=500)
@@ -649,6 +659,9 @@ def setup_interface(org_ws, num_reals=100):
 
     # add model run command
     pf.mod_sys_cmds.append("mf6")
+
+    # add modpath run command
+    pf.mod_sys_cmds.append("mp7 freyberg6_mp_forward.mpsim")
 
     # build pest control file
     pst = pf.build_pst('freyberg.pst')
@@ -1758,7 +1771,7 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             plt.close(figall)
 
 def sync_phase(s_d = "monthly_model_files_org"):
-    c_d = "daily_model_files_org"
+    c_d = "daily_model_files_trnsprt_org"
 
 
     t_c_d = c_d.replace("_org","")
@@ -1797,6 +1810,7 @@ def sync_phase(s_d = "monthly_model_files_org"):
         # now doing this in setup_pst
         #wel_files[1].loc[:,"flux"] = 0.0
         for sp,df in wel_files.items():
+            df.loc[:, "aux"] = 0
             # uniform base pumping otherwise
             if sp != 1:
                 df.loc[:,"flux"] = -300.0
@@ -1906,7 +1920,7 @@ def add_new_stress(m_d_org = "monthly_model_files"):
     d_start_sp = m_start_sp * 30
     d_lrc = (m_lrc[0],m_lrc[1]*3,m_lrc[2]*3)
     new_flux = -550
-    d_d_org = "daily_model_files"
+    d_d_org = "daily_model_files_trnsprt"
     d_d_new = d_d_org+"_newstress"
     if os.path.exists(d_d_new):
         shutil.rmtree(d_d_new)
@@ -1915,12 +1929,14 @@ def add_new_stress(m_d_org = "monthly_model_files"):
     wel_files = [f for f in os.listdir(d_d_new) if ".wel_stress_period" in f and f.endswith(".txt")]
     for wel_file in wel_files:
         sp = int(wel_file.split(".")[1].split('_')[-1])
-        df = pd.read_csv(os.path.join(d_d_new,wel_file),header=None,names=["l","r","c","flux"],delim_whitespace=True)
+        df = pd.read_csv(os.path.join(d_d_new,wel_file),header=None,names=["l","r","c","flux","aux"],delim_whitespace=True)
         df.loc[6,["l","r","c"]] = [d_lrc[0],d_lrc[1],d_lrc[2]]
         if sp < d_start_sp:
             df.loc[6,"flux"] = 0.0
+            df.loc[6, "aux"] = 0.0
         else:
             df.loc[6, "flux"] = new_flux
+            df.loc[6, "aux"] = 0.0
         df = df.astype({"l": int, "r": int, "c": int})
         print(df.dtypes)
         df.to_csv(os.path.join(d_d_new,wel_file),header=False,index=False,sep=" ")
@@ -1944,12 +1960,14 @@ def add_new_stress(m_d_org = "monthly_model_files"):
     wel_files = [f for f in os.listdir(m_d_new) if ".wel_stress_period" in f and f.endswith(".txt")]
     for wel_file in wel_files:
         sp = int(wel_file.split(".")[1].split('_')[-1])
-        df = pd.read_csv(os.path.join(m_d_new,wel_file),header=None,names=["l","r","c","flux"],delim_whitespace=True)
+        df = pd.read_csv(os.path.join(m_d_new,wel_file),header=None,names=["l","r","c","flux","aux"],delim_whitespace=True)
         df.loc[6,["l","r","c"]] = [m_lrc[0],m_lrc[1],m_lrc[2]]
         if sp < m_start_sp:
             df.loc[6,"flux"] = 0.0
+            df.loc[6, "aux"] = 0.0
         else:
             df.loc[6, "flux"] = new_flux
+            df.loc[6, "aux"] = 0.0
         df = df.astype({"l": int, "r": int, "c": int})
         print(df.dtypes)
         df.to_csv(os.path.join(m_d_new,wel_file),header=False,index=False,sep=" ")
@@ -2101,18 +2119,18 @@ def reduce_to_layer_pars(t_d):
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
 
-
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr")
-    #make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    exit()
+    # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
 
     #exit()
     # c_d = setup_interface("daily_model_files")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    b_d = setup_interface("monthly_model_files_1lyr_newstress")
+    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
     reduce_to_layer_pars("monthly_model_files_template")
     s_d = monthly_ies_to_da(b_d,include_est_states=False)
