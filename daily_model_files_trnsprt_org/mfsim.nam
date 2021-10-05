@@ -1,0 +1,23 @@
+BEGIN Options
+  CONTINUE
+END Options
+
+BEGIN TIMING
+  TDIS6  freyberg6.tdis
+END TIMING
+
+BEGIN MODELS
+  gwf6  freyberg6.nam  freyberg6
+  gwt6  freyberg6_trns.nam  freyberg6_trns
+END MODELS
+
+BEGIN EXCHANGES
+  GWF6-GWT6  freyberg6.gwfgwt  freyberg6  freyberg6_trns
+END EXCHANGES
+
+BEGIN SOLUTIONGROUP  1
+  MXITER  1
+  ims6  freyberg6.ims  freyberg6
+  ims6  freyberg6_trns.ims  freyberg6_trns
+END SOLUTIONGROUP  1
+

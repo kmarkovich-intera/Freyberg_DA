@@ -1,0 +1,10 @@
+# ATS input file
+
+BEGIN dimensions
+MAXATS 1
+END dimensions
+
+BEGIN perioddata
+# per dt0 dtmin dtmax dtadj dtfailadj
+1 0.00001 1.0E-10 100.0 2.0 5.0
+END perioddata

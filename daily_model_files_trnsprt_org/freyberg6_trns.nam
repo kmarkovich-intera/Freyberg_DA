@@ -1,0 +1,15 @@
+BEGIN options
+END options
+
+BEGIN packages
+  DIS6  freyberg6_trns.dis  dis
+  IC6   freyberg6_trns.ic   ic
+  ADV6  freyberg6_trns.adv  adv
+#   DSP6  freyberg6_trns.dsp  dsp
+  MST6  freyberg6_trns.mst  mst
+  SSM6  freyberg6_trns.ssm  ssm
+  OC6   freyberg6_trns.oc   oc
+  SFT6  freyberg6_trns.sft  sfr_1
+  CNC6  freyberg6_trns.cnc  cnc
+END packages
+
