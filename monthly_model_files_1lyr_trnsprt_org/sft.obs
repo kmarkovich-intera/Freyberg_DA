@@ -1,0 +1,9 @@
+BEGIN options
+  DIGITS  7
+  PRINT_INPUT
+END options
+
+BEGIN continuous  FILEOUT  sft.csv
+  tailwater  CONCENTRATION  40
+END continuous  FILEOUT  sft.csv
+

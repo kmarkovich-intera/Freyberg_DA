@@ -495,11 +495,21 @@ def setup_interface(org_ws, num_reals=100):
                              longnames=True, spatial_reference=m.modelgrid,
                              zero_based=False, start_datetime="1-1-2018")
 
-    inc,cum = test_process_lst_file(template_ws)
-    df = pf.add_observations("inc.csv",index_cols=["time"],use_cols=inc.columns.tolist(),ofile_sep=",",prefix="inc",obsgp="inc")
-    df = pf.add_observations("cum.csv", index_cols=["time"], use_cols=cum.columns.tolist(), ofile_sep=",", prefix="cum",
-                             obsgp="cum")
-    pf.add_py_function("workflow.py","process_lst_file()",is_pre_cmd=False)
+    file_names = test_process_list_files(template_d)
+    for file_name in file_names:
+        df = pd.read_csv(os.path.join(template_d,file_name),index_col=0,delim_whitespace=True)
+        names = df.columns.tolist()
+        pf.add_observations(file_name, index_cols=["time"], use_cols=names, ofile_skip=0,
+                            obsgp=file_name.split(".")[0],
+                            prefix=file_name.split(".")[0], ofile_sep=" ")
+
+    pf.add_py_function("benchmark.py", "process_list_files()", is_pre_cmd=False)
+
+    # inc,cum = test_process_lst_file(template_ws)
+    # df = pf.add_observations("inc.csv",index_cols=["time"],use_cols=inc.columns.tolist(),ofile_sep=",",prefix="inc",obsgp="inc")
+    # df = pf.add_observations("cum.csv", index_cols=["time"], use_cols=cum.columns.tolist(), ofile_sep=",", prefix="cum",
+    #                          obsgp="cum")
+    # pf.add_py_function("workflow.py","process_lst_file()",is_pre_cmd=False)
 
 
     # add observations from the sfr observation output file
@@ -507,6 +517,12 @@ def setup_interface(org_ws, num_reals=100):
     pf.add_observations("sfr.csv", insfile="sfr.csv.ins", index_cols="time",
                         use_cols=list(df.columns.values),
                         prefix="sfr")
+
+    # add observations from the sft observation output file
+    df = pd.read_csv(os.path.join(template_ws, "sft.csv"), index_col=0)
+    pf.add_observations("sft.csv", insfile="sft.csv.ins", index_cols="time",
+                        use_cols=list(df.columns.values),
+                        prefix="sft")
 
     # add observations for the heads observation output file
     df = pd.read_csv(os.path.join(template_ws, "heads.csv"), index_col=0)
@@ -520,6 +536,7 @@ def setup_interface(org_ws, num_reals=100):
     for k, fname in enumerate(fnames):
         prefix = "head_k:{0}".format(k)
         pf.add_observations(fname, prefix=prefix, obsgp=prefix)
+        
 
     # write a really simple instruction file to read the MODPATH end point file
     # out_file = "freyberg6_mp_forward.mpend"
@@ -754,6 +771,41 @@ def process_lst_file():
     inc.to_csv("inc.csv")
     cum.to_csv("cum.csv")
     return inc,cum
+
+def process_list_files():
+    """process the gwf and gwt list files into a format that is actually useful....
+        took this lil number from benchmark.py in zp1 to include transport list file components
+    """
+    class Mf6TListBudget(flopy.utils.mflistfile.ListBudget):
+        """"""
+
+        def set_budget_key(self):
+            self.budgetkey = "MASS BUDGET FOR ENTIRE MODEL"
+            return
+
+    ucn = flopy.utils.HeadFile(os.path.join("freyberg6_trns.ucn"), precision="double", text="CONCENTRATION")
+    lst = flopy.utils.Mf6ListBudget("freyberg6.lst")
+    fdf,cdf = lst.get_dataframes(diff=True)
+    fdf.index = ucn.times
+    cdf.index = ucn.times
+    cdf.index.name = "time"
+    fdf.index.name = "time"
+    cdf.fillna(0.0,inplace=True)
+    fdf.fillna(0.0,inplace=True)
+    fdf.to_csv("inc_flow.dat",sep=" ")
+    fdf.to_csv("cum_flow.dat", sep=" ")
+
+    lst = Mf6TListBudget("freyberg6_trns.lst")
+    fdf,cdf = lst.get_dataframes(diff=False)
+    cdf.index = ucn.times
+    fdf.index = ucn.times
+    cdf.index.name = "time"
+    fdf.index.name = "time"
+    cdf.fillna(0.0, inplace=True)
+    fdf.fillna(0.0, inplace=True)
+    cdf.to_csv("cum_mass.dat", sep=" ")
+    fdf.to_csv("inc_mass.dat", sep=" ")
+    return ["inc_flow.dat","cum_flow.dat","cum_mass.dat","inc_mass.dat"]
 
 def test_process_lst_file(d):
     cwd = os.getcwd()

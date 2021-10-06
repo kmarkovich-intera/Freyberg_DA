@@ -4,6 +4,7 @@ BEGIN Options
   CONCENTRATION FILEOUT freyberg6_trnsprt.cbs
   BUDGET FILEOUT freyberg6_trnsprt.bud
   SAVE_FLOWS
+  OBS6  FILEIN  sft.obs
 END Options
 
 BEGIN PACKAGEDATA
