@@ -453,7 +453,7 @@ def test_extract_state_obs(t_d):
     return fnames
 
 
-def extract_state_obs():
+def extract_hds_state_obs():
     hds = flopy.utils.HeadFile('freyberg6_freyberg.hds')
     arr = hds.get_data()
     fnames = []
@@ -461,6 +461,30 @@ def extract_state_obs():
         fname = 'heads_' + str(k) + '.dat'
         np.savetxt(fname, a, fmt='%15.6E')
         fnames.append(fname)
+    return fnames
+
+def test_extract_hds_state_obs(t_d):
+    cwd = os.getcwd()
+    os.chdir(t_d)
+    fnames = extract_hds_state_obs()
+    os.chdir(cwd)
+    return fnames
+
+def extract_conc_state_obs():
+    ucn = flopy.utils.HeadFile('freyberg6_trns.ucn', precision="double", text="CONCENTRATION")
+    arr = ucn.get_data()
+    fnames = []
+    for k, a in enumerate(arr):
+        fname = 'conc_' + str(k) + '.dat'
+        np.savetxt(fname, a, fmt='%15.6E')
+        fnames.append(fname)
+    return fnames
+
+def test_extract_conc_state_obs(t_d):
+    cwd = os.getcwd()
+    os.chdir(t_d)
+    fnames = extract_conc_state_obs()
+    os.chdir(cwd)
     return fnames
 
 
@@ -495,15 +519,15 @@ def setup_interface(org_ws, num_reals=100):
                              longnames=True, spatial_reference=m.modelgrid,
                              zero_based=False, start_datetime="1-1-2018")
 
-    file_names = test_process_list_files(template_d)
+    file_names = test_process_list_files(template_ws)
     for file_name in file_names:
-        df = pd.read_csv(os.path.join(template_d,file_name),index_col=0,delim_whitespace=True)
+        df = pd.read_csv(os.path.join(template_ws,file_name),index_col=0,delim_whitespace=True)
         names = df.columns.tolist()
         pf.add_observations(file_name, index_cols=["time"], use_cols=names, ofile_skip=0,
                             obsgp=file_name.split(".")[0],
                             prefix=file_name.split(".")[0], ofile_sep=" ")
 
-    pf.add_py_function("benchmark.py", "process_list_files()", is_pre_cmd=False)
+    pf.add_py_function("workflow.py", "process_list_files()", is_pre_cmd=False)
 
     # inc,cum = test_process_lst_file(template_ws)
     # df = pf.add_observations("inc.csv",index_cols=["time"],use_cols=inc.columns.tolist(),ofile_sep=",",prefix="inc",obsgp="inc")
@@ -530,13 +554,20 @@ def setup_interface(org_ws, num_reals=100):
                         index_cols="time", use_cols=list(df.columns.values),
                         prefix="hds")
 
-    # add observations for simulated states
-    pf.add_py_function("workflow.py", "extract_state_obs()", is_pre_cmd=False)
-    fnames = test_extract_state_obs(template_ws)
+    # add observations for simulated hds states
+    pf.add_py_function("workflow.py", "extract_hds_state_obs()", is_pre_cmd=False)
+    fnames = test_extract_hds_state_obs(template_ws)
     for k, fname in enumerate(fnames):
         prefix = "head_k:{0}".format(k)
         pf.add_observations(fname, prefix=prefix, obsgp=prefix)
-        
+
+    # add observations for simulated conc states
+    pf.add_py_function("workflow.py", "extract_conc_state_obs()", is_pre_cmd=False)
+    fnames = test_extract_conc_state_obs(template_ws)
+    for k, fname in enumerate(fnames):
+        prefix = "conc_k:{0}".format(k)
+        pf.add_observations(fname, prefix=prefix, obsgp=prefix)
+
 
     # write a really simple instruction file to read the MODPATH end point file
     # out_file = "freyberg6_mp_forward.mpend"
@@ -649,6 +680,23 @@ def setup_interface(org_ws, num_reals=100):
                           transform="none",
                           lower_bound=-10000, upper_bound=10000, zone_array=zn_arr)
 
+        # add direct pars for the conc strt values
+    tag = "conc"
+    arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
+    for arr_file in arr_files:
+        print(arr_file)
+        # make sure each array file in nrow X ncol dimensions (not wrapped)
+        arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+        np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+        k = int(arr_file.split('.')[1][-1]) - 1
+        prefix = "conc_k:{0}".format(k)
+        zn_arr = np.ones_like(arr, dtype=int)
+        zn_arr[arr < 0] = 0
+        zn_arr[arr > 1000] = 0
+        pf.add_parameters(arr_file, par_type="grid", par_style="direct", pargp=prefix, par_name_base=prefix,
+                                transform="none",
+                                lower_bound=-10000, upper_bound=10000, zone_array=zn_arr)
+
     # get all the list-type files associated with the wel package
     list_files = [f for f in os.listdir(org_ws) if "freyberg6.wel_stress_period_data_" in f and f.endswith(".txt")]
     # for each wel-package list-type file
@@ -677,13 +725,16 @@ def setup_interface(org_ws, num_reals=100):
     # add model run command
     pf.mod_sys_cmds.append("mf6")
 
+    pf.add_py_function("workflow.py","remove_ats()",is_pre_cmd=True)
+
     # add modpath run command
-    pf.mod_sys_cmds.append("mp7 freyberg6_mp_forward.mpsim")
+    # pf.mod_sys_cmds.append("mp7 freyberg6_mp_forward.mpsim")
 
     # build pest control file
     pst = pf.build_pst('freyberg.pst')
     par = pst.parameter_data
-    strt_pars = par.loc[par.parnme.str.contains("head_k"), "parnme"]
+    searchfor = ['head_k', 'conc_k']
+    strt_pars = par.loc[par.parnme.str.contains('|'.join(searchfor)), "parnme"]
 
     # set the first stress period to no pumping
     first_wpar = "twel_mlt_0_inst:0_usecol:3"
@@ -694,8 +745,10 @@ def setup_interface(org_ws, num_reals=100):
     pf.pst.parameter_data.loc[first_wpar, "parubnd"] = 1.0e-9
 
     # fix the new stress well if present
-
     new_wpar = par.loc[par.parnme.apply(lambda x: "wel_grid" in x and "idx0:0" in x),"parnme"]
+    m_lrc = (1,25,5)
+    if "daily" in template_ws:
+        m_lrc = (m_lrc[0],m_lrc[1]*3,m_lrc[2]*3)
     if new_wpar.shape[0] > 0:
         new_wpar = "wel_grid_inst:0_usecol:3_idx0:{0}_idx1:{1}_idx2:{2}".format(m_lrc[0]-1,m_lrc[1]-1,m_lrc[2]-1)
         assert new_wpar in set(pf.pst.par_names),new_wpar
@@ -721,7 +774,7 @@ def setup_interface(org_ws, num_reals=100):
     # ident the obs-par state linkage
     obs = pst.observation_data
     state_obs = obs.loc[obs.obsnme.str.contains("arrobs_head"), :].copy()
-    state_par = par.loc[par.parnme.str.contains("d_head"), :].copy()
+    state_par = par.loc[par.parnme.str.contains('d_head'), :].copy()
     for v in ["k", "i", "j"]:
         state_par.loc[:, v] = state_par.loc[:, v].apply(int)
         state_obs.loc[:, v] = state_obs.loc[:, v].apply(int)
@@ -730,9 +783,20 @@ def setup_interface(org_ws, num_reals=100):
     obs.loc[:, "state_par_link"] = np.nan
     state_obs.loc[:, "kij"] = state_obs.apply(lambda x: "{0}_{1}_{2}".format(x.k, x.i, x.j), axis=1)
 
-    # for kij,n in state_par_dict.items():
-    #    if kij not in state_obs.kij:
-    #        print(kij,n)
+    obs.loc[state_obs.obsnme, "state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.kij), np.nan), axis=1)
+    print(obs.state_par_link.dropna().shape)
+
+    # ident the obs-par state linkage
+    obs = pst.observation_data
+    state_obs = obs.loc[obs.obsnme.str.contains("arrobs_conc"), :].copy()
+    state_par = par.loc[par.parnme.str.contains('d_conc'), :].copy()
+    for v in ["k", "i", "j"]:
+        state_par.loc[:, v] = state_par.loc[:, v].apply(int)
+        state_obs.loc[:, v] = state_obs.loc[:, v].apply(int)
+    state_par_dict = {"{0}_{1}_{2}".format(k, i, j): n for k, i, j, n in
+                      zip(state_par.k, state_par.i, state_par.j, state_par.parnme)}
+    state_obs.loc[:, "kij"] = state_obs.apply(lambda x: "{0}_{1}_{2}".format(x.k, x.i, x.j), axis=1)
+
     obs.loc[state_obs.obsnme, "state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.kij), np.nan), axis=1)
     print(obs.state_par_link.dropna().shape)
 
@@ -759,6 +823,22 @@ def setup_interface(org_ws, num_reals=100):
     # write the updated pest control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
     return template_ws
+
+def remove_ats():
+    ats_flag = np.loadtxt("ats.txt")
+    print(ats_flag)
+    if ats_flag == 0:
+        with open("freyberg6.tdis", 'w') as f:
+            f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+            f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+            f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
+
+        # write a tdis template file
+        with open("freyberg6.tdis.tpl", 'w') as f:
+            f.write("ptf  ~\n")
+            f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+            f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
+            f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
 
 
 def process_lst_file():
@@ -814,6 +894,13 @@ def test_process_lst_file(d):
     os.chdir(cwd)
     return inc,cum
 
+def test_process_list_files(d):
+    cwd = os.getcwd()
+    os.chdir(d)
+    inc_flow,cum_flow,cum_mass,inc_mass = process_list_files()
+    os.chdir(cwd)
+    return inc_flow,cum_flow,cum_mass,inc_mass
+
 
 def monthly_ies_to_da(org_d,include_est_states=False):
     """convert the batch monthly model to sequential formulation"""
@@ -839,16 +926,14 @@ def monthly_ies_to_da(org_d,include_est_states=False):
 
     # modify the tdis
     with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
-        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
         f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
         f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
-    # make sure it runs
-    pyemu.os_utils.run("mf6", cwd=t_d)
 
     # write a tdis template file
     with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
         f.write("ptf  ~\n")
-        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
         f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
         f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
     new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
@@ -862,14 +947,28 @@ def monthly_ies_to_da(org_d,include_est_states=False):
 
     # add the new tdis template file
     for tpl, inf, cy in zip(new_tpl, new_in, new_tpl_cycle):
+        print(tpl)
         df = pst.add_parameters(tpl, inf, pst_path=".")
         pst.parameter_data.loc[df.parnme, "cycle"] = cy
         pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
+
+    #add dummy parameter for ats
+    with open(os.path.join(t_d, "ats.txt.tpl"), 'w') as f:
+        f.write("ptf  ~\n")
+        f.write("~ats_flag~")
+    ats_tpl = os.path.join(t_d, "ats.txt.tpl")
+    ats_in = os.path.join(t_d, "ats.txt")
+    ats_tpl_cycle = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+    df = pst.add_parameters(ats_tpl, ats_in, pst_path=".")
+    pst.parameter_data.loc[df.parnme, "cycle"] = -1
+    pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
 
     # write par cycle table for the perlen par (fixed)
     pers = org_sim.tdis.perioddata.array["perlen"]
     pdf = pd.DataFrame(index=['perlen'], columns=np.arange(org_sim.tdis.nper.data))
     pdf.loc['perlen', :] = pers
+    pdf.loc['ats_flag',:] = ats_tpl_cycle
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
@@ -884,7 +983,8 @@ def monthly_ies_to_da(org_d,include_est_states=False):
 
     # fix the sfr and list instruction files - only need one output time
     fname = 'sfr.csv'
-    ins_names = ["sfr.csv.ins","inc.csv.ins","cum.csv.ins"]
+    ins_names = ["sfr.csv.ins","sft.csv.ins","cum_mass.dat.ins","cum_flow.dat.ins","inc_mass.dat.ins","inc_flow.dat.ins"]
+    # ins_names = ["sfr.csv.ins","inc.csv.ins","cum.csv.ins"]
     for ins_name in ins_names:
         pst.drop_observations(os.path.join(t_d, ins_name), '.')
 
@@ -908,7 +1008,20 @@ def monthly_ies_to_da(org_d,include_est_states=False):
             pst.parameter_data.loc[df.parnme,"parval1"] = 40
             pst.parameter_data.loc[df.parnme, "parubnd"] = 60
             pst.parameter_data.loc[df.parnme, "parlbnd"] = 20
-            pst.parameter_data.loc[df.parnme, "parlbnd"] = 20
+
+        # first add conc sim state pars - just copy the "direct head" par template files
+        ic_tpl_files = [f for f in os.listdir(t_d) if ".icc_" in f and f.endswith(".txt.tpl")]
+        for ic_tpl_file in ic_tpl_files:
+            print(ic_tpl_file)
+            lines = open(os.path.join(t_d,ic_tpl_file)).readlines()
+            new_tpl = ic_tpl_file.replace(".txt.tpl",".est.txt.tpl")
+            with open(os.path.join(t_d,new_tpl),'w') as f:
+                for line in lines:
+                    f.write(line.replace("d_conc","est_d_conc"))
+            df = pst.add_parameters(os.path.join(t_d,new_tpl),pst_path=".")
+            pst.parameter_data.loc[df.parnme,"parval1"] = 40
+            pst.parameter_data.loc[df.parnme, "parubnd"] = 1000
+            pst.parameter_data.loc[df.parnme, "parlbnd"] = 0
 
         # now add double fake pars for the forecasts just so they are getting
         # estimated one-step-ahead values
@@ -2147,21 +2260,6 @@ def reduce_to_layer_pars(t_d):
     pe.loc[:,grwel_par] = 1.0
     par.loc[grwel_par,"partrans"] = "fixed"
 
-    # grrch_par = par.loc[par.parnme.str.startswith("m_rch_gr"),"parnme"]
-    # par.loc[grrch_par,"partrans"] = "fixed"
-    # pe.loc[:,grrch_par] = 1.0
-    # crch_par = par.loc[par.parnme.str.startswith("d_const_rch"),:].copy()
-    # crch_par.loc[:,"sp"] = crch_par.parnme.apply(lambda x: int(x.split('_')[4]))
-
-    #tie_crch_par = crch_par.loc[crch_par.sp.apply(lambda x: x not in [1,2]),"parnme"]
-    #tie_crch_par = crch_par.loc[crch_par.sp != 1,"parnme"]
-    # tie_crch_par = crch_par.parnme
-    # val = crch_par.loc[tie_crch_par,"parval1"].mean()
-    # #pe.drop(labels=tie_crch_par,axis=1,inplace=True)
-    # pe.loc[:,tie_crch_par] = val
-    # par.loc[tie_crch_par,"partrans"] = "fixed"
-    #par.loc[tie_crch_par, "partied"] = "d_const_rch_recharge_2_cn_inst:0"
-
     pe.to_binary(os.path.join(t_d, "prior_reduced.jcb"))
     pst.pestpp_options["ies_par_en"] = "prior_reduced.jcb"
     pst.control_data.noptmax = -2
@@ -2173,20 +2271,18 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    exit()
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
 
-    #exit()
-    # c_d = setup_interface("daily_model_files")
+    c_d = setup_interface("daily_model_files_trnsprt_newstress")
     # m_c_d = run_complex_prior_mc(c_d)
 
     b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
-    reduce_to_layer_pars("monthly_model_files_template")
+    # reduce_to_layer_pars("monthly_model_files_template")
     s_d = monthly_ies_to_da(b_d,include_est_states=False)
-    # exit()
 
     b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
