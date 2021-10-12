@@ -669,8 +669,9 @@ def setup_interface(org_ws, num_reals=100):
     arr_files = [f for f in os.listdir(template_ws) if tag in f and f.endswith(".txt")]
     for arr_file in arr_files:
         # make sure each array file in nrow X ncol dimensions (not wrapped)
-        arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
-        np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+        # arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+        arr = np.loadtxt(os.path.join(template_ws, arr_file))
+        # np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
         k = int(arr_file.split('.')[1][-1]) - 1
         prefix = "head_k:{0}".format(k)
         zn_arr = np.ones_like(arr, dtype=int)
@@ -686,13 +687,14 @@ def setup_interface(org_ws, num_reals=100):
     for arr_file in arr_files:
         print(arr_file)
         # make sure each array file in nrow X ncol dimensions (not wrapped)
-        arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
-        np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
+        # arr = np.loadtxt(os.path.join(template_ws, arr_file)).reshape(ib.shape)
+        arr = np.loadtxt(os.path.join(template_ws, arr_file))
+        # np.savetxt(os.path.join(template_ws, arr_file), arr, fmt="%15.6E")
         k = int(arr_file.split('.')[1][-1]) - 1
         prefix = "conc_k:{0}".format(k)
-        zn_arr = np.ones_like(arr, dtype=int)
-        zn_arr[arr < 0] = 0
-        zn_arr[arr > 1000] = 0
+        # zn_arr = np.ones_like(arr, dtype=int)
+        # zn_arr[arr < 0] = 0
+        # zn_arr[arr > 1000] = 0
         pf.add_parameters(arr_file, par_type="grid", par_style="direct", pargp=prefix, par_name_base=prefix,
                                 transform="none",
                                 lower_bound=-10000, upper_bound=10000, zone_array=zn_arr)
@@ -2271,25 +2273,25 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
     # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
 
-    c_d = setup_interface("daily_model_files_trnsprt_newstress")
+    # c_d = setup_interface("daily_model_files_trnsprt_newstress")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
 
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-    exit()
+    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    # exit()
     #c_d = setup_interface("daily_model_files")
-    #m_c_d = run_complex_prior_mc(c_d,num_workers=14)
-
+    m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=4)
+    exit()
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #plot_prior_mc()
     #exit()
