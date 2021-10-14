@@ -167,6 +167,12 @@ def run_complex_prior_mc(c_d,num_workers=4):
                                  master_dir=m_c_d)
     return m_c_d
 
+def run_bat_prior_mc(b_d,num_workers=4):
+    m_b_d = b_d.replace("template", "master_prior")
+    pyemu.os_utils.start_workers(b_d, "pestpp-ies", "freyberg.pst", num_workers=num_workers, worker_root=".",
+                                 master_dir=m_b_d)
+    return m_b_d
+
 
 def plot_phi_seq_bat():
     seq_phi_master = []
@@ -488,7 +494,7 @@ def test_extract_conc_state_obs(t_d):
     return fnames
 
 
-def setup_interface(org_ws, num_reals=100):
+def setup_interface(org_ws, num_reals=10):
     """copied from auto_pest.py
 
     """
@@ -996,6 +1002,7 @@ def monthly_ies_to_da(org_d,include_est_states=False):
                 f.write(line)
         pst.add_observations(os.path.join(t_d, ins_name), pst_path=".")
 
+
     if include_est_states:
         # first add gw level sim state pars - just copy the "direct head" par template files
         ic_tpl_files = [f for f in os.listdir(t_d) if ".ic_" in f and f.endswith(".txt.tpl")]
@@ -1348,7 +1355,6 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
     # just picked weights that seemed to balance-ish the one realization I looked at...
     obs.loc[:,"weight"] = 0.0
     for k in keep.copy():
-    #for k in keep_sngl_lyr:
         if is_1_lay:
             k = k.replace("k:2","k:0")
         kobs = obs.loc[obs.obsnme.str.contains(k),:].copy()
@@ -1385,7 +1391,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     bobs = bpst.observation_data
     # work on the sequential obs names - yuck
     seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names]
-    seq_names = [n+"_time:10000.0" if "sfr" in n else n for n in seq_names]
+    seq_names = [n+"_time:1e-05" if "sfr" in n else n for n in seq_names]
     seq_names = set(seq_names)
     assert len(seq_names) == len(keep)
 
@@ -1393,7 +1399,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     spst = pyemu.Pst(os.path.join(s_d, "freyberg.pst"))
     spst.observation_data.loc[:,"weight"] = 0.0
     snames = set(spst.obs_names)
-    assert len(seq_names - snames) == 0
+    # assert len(seq_names - snames) == 0
     seq_names = list(seq_names)
     seq_names.sort()
 
@@ -1407,10 +1413,10 @@ def map_simple_bat_to_seq(b_d,s_d):
 
         # the batch obs info for this sequential obs name
         bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:10000.0","")),:].copy()
-
         # sort by float time
         bsobs.loc[:,"time"] = bsobs.time.apply(float)
         bsobs.sort_values(by="time",inplace=True)
+        print(bsobs)
         # set the values for the 2nd thru 13th stress period/cycle
         odf.loc[seq_name,np.arange(1,13)] = bsobs.obsval.iloc[1:13].values
         wdf.loc[seq_name, np.arange(1,13)] = bsobs.weight.iloc[1:13].values
@@ -2281,24 +2287,25 @@ if __name__ == "__main__":
     # c_d = setup_interface("daily_model_files_trnsprt_newstress")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
+    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
-    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    s_d = monthly_ies_to_da(b_d,include_est_states=False)
 
-    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     # exit()
-    #c_d = setup_interface("daily_model_files")
-    m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=4)
-    exit()
+    # c_d = setup_interface("daily_model_files")
+    # m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
+    # m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=4)
+    # exit()
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #plot_prior_mc()
     #exit()
     #
-    # compare_mf6_freyberg(num_workers=8, num_replicates=4,num_reals=50,use_sim_states=True,
+    # compare_mf6_freyberg(num_workers=8, num_replicates=10,num_reals=50,use_sim_states=True,
     #                    run_ies=True,run_da=True,adj_init_states=True)
-    #exit()
+    exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()

@@ -4,8 +4,8 @@ END options
 
 BEGIN griddata
   porosity LAYERED
-    CONSTANT       0.0001
-    CONSTANT       0.0001
-    CONSTANT       0.0001
+    CONSTANT       0.001
+    CONSTANT       0.001
+    CONSTANT       0.001
 END griddata
 
