@@ -1406,17 +1406,17 @@ def map_simple_bat_to_seq(b_d,s_d):
     sobs = spst.observation_data.loc[seq_names]
 
     # build the weight and obs cycle tables
-    odf = pd.DataFrame(columns = np.arange(org_sim.tdis.nper.data),index=seq_names)
+    odf = pd.DataFrame(columns=np.arange(org_sim.tdis.nper.data),index=seq_names)
     wdf = pd.DataFrame(columns=np.arange(org_sim.tdis.nper.data), index=seq_names)
     wdf.loc[:,:] = 0.0
     for seq_name in seq_names:
-
+        print(seq_name)
         # the batch obs info for this sequential obs name
-        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:10000.0","")),:].copy()
+        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:1e-05","")),:].copy()
         # sort by float time
         bsobs.loc[:,"time"] = bsobs.time.apply(float)
         bsobs.sort_values(by="time",inplace=True)
-        print(bsobs)
+
         # set the values for the 2nd thru 13th stress period/cycle
         odf.loc[seq_name,np.arange(1,13)] = bsobs.obsval.iloc[1:13].values
         wdf.loc[seq_name, np.arange(1,13)] = bsobs.weight.iloc[1:13].values
@@ -2279,15 +2279,15 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
+    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
 
     # c_d = setup_interface("daily_model_files_trnsprt_newstress")
     # m_c_d = run_complex_prior_mc(c_d)
 
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
     s_d = monthly_ies_to_da(b_d,include_est_states=False)
@@ -2303,8 +2303,8 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    # compare_mf6_freyberg(num_workers=8, num_replicates=10,num_reals=50,use_sim_states=True,
-    #                    run_ies=True,run_da=True,adj_init_states=True)
+    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
+                       run_ies=True,run_da=True,adj_init_states=True)
     exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
