@@ -733,7 +733,7 @@ def setup_interface(org_ws, num_reals=10):
     # add model run command
     pf.mod_sys_cmds.append("mf6")
 
-    pf.add_py_function("workflow.py","remove_ats()",is_pre_cmd=True)
+    # pf.add_py_function("workflow.py","remove_ats()",is_pre_cmd=True)
 
     # add modpath run command
     # pf.mod_sys_cmds.append("mp7 freyberg6_mp_forward.mpsim")
@@ -934,14 +934,16 @@ def monthly_ies_to_da(org_d,include_est_states=False):
 
     # modify the tdis
     with open(os.path.join(t_d, "freyberg6.tdis"), 'w') as f:
-        f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
+        # f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
         f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
         f.write("BEGIN PERIODDATA\n31.00000000  1       1.00000000\nEND PERIODDATA\n")
 
     # write a tdis template file
     with open(os.path.join(t_d, "freyberg6.tdis.tpl"), 'w') as f:
         f.write("ptf  ~\n")
-        f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
+        # f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
+        f.write("BEGIN Options\n  TIME_UNITS  days\nEND Options\n")
         f.write("BEGIN Dimensions\n  NPER  1\nEND Dimensions\n")
         f.write("BEGIN PERIODDATA\n~  perlen  ~  1       1.00000000\nEND PERIODDATA\n")
     new_tpl, new_in = [os.path.join(t_d, "freyberg6.tdis.tpl")], [os.path.join(t_d, "freyberg6.tdis")]
@@ -960,23 +962,23 @@ def monthly_ies_to_da(org_d,include_est_states=False):
         pst.parameter_data.loc[df.parnme, "cycle"] = cy
         pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
 
-    #add dummy parameter for ats
-    with open(os.path.join(t_d, "ats.txt.tpl"), 'w') as f:
-        f.write("ptf  ~\n")
-        f.write("~ats_flag~")
-    ats_tpl = os.path.join(t_d, "ats.txt.tpl")
-    ats_in = os.path.join(t_d, "ats.txt")
-    ats_tpl_cycle = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-
-    df = pst.add_parameters(ats_tpl, ats_in, pst_path=".")
-    pst.parameter_data.loc[df.parnme, "cycle"] = -1
-    pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
+    # #add dummy parameter for ats
+    # with open(os.path.join(t_d, "ats.txt.tpl"), 'w') as f:
+    #     f.write("ptf  ~\n")
+    #     f.write("~ats_flag~")
+    # ats_tpl = os.path.join(t_d, "ats.txt.tpl")
+    # ats_in = os.path.join(t_d, "ats.txt")
+    # ats_tpl_cycle = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    #
+    # df = pst.add_parameters(ats_tpl, ats_in, pst_path=".")
+    # pst.parameter_data.loc[df.parnme, "cycle"] = -1
+    # pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
 
     # write par cycle table for the perlen par (fixed)
     pers = org_sim.tdis.perioddata.array["perlen"]
     pdf = pd.DataFrame(index=['perlen'], columns=np.arange(org_sim.tdis.nper.data))
     pdf.loc['perlen', :] = pers
-    pdf.loc['ats_flag',:] = ats_tpl_cycle
+    # pdf.loc['ats_flag',:] = ats_tpl_cycle
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
@@ -1391,7 +1393,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     bobs = bpst.observation_data
     # work on the sequential obs names - yuck
     seq_names = [o.split("_time")[0].replace("hds_usecol:","") for o in bpst.nnz_obs_names]
-    seq_names = [n+"_time:1e-05" if "sfr" in n else n for n in seq_names]
+    seq_names = [n+"_time:10000.0" if "sfr" in n else n for n in seq_names]
     seq_names = set(seq_names)
     assert len(seq_names) == len(keep)
 
@@ -1412,7 +1414,7 @@ def map_simple_bat_to_seq(b_d,s_d):
     for seq_name in seq_names:
         print(seq_name)
         # the batch obs info for this sequential obs name
-        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:1e-05","")),:].copy()
+        bsobs = bobs.loc[bobs.obsnme.str.contains(seq_name.replace("_time:10000.0","")),:].copy()
         # sort by float time
         bsobs.loc[:,"time"] = bsobs.time.apply(float)
         bsobs.sort_values(by="time",inplace=True)
@@ -2279,10 +2281,9 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
 
     # c_d = setup_interface("daily_model_files_trnsprt_newstress")
     # m_c_d = run_complex_prior_mc(c_d)
@@ -2290,10 +2291,10 @@ if __name__ == "__main__":
     # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
 
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     # exit()
     # c_d = setup_interface("daily_model_files")
     # m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
@@ -2303,9 +2304,9 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
-                       run_ies=True,run_da=True,adj_init_states=True)
-    exit()
+    # compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
+    #                    run_ies=True,run_da=True,adj_init_states=True)
+    # exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()

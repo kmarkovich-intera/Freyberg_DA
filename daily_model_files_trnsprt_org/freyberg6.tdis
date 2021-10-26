@@ -1,6 +1,5 @@
 BEGIN Options
   TIME_UNITS  days
-  ATS6 FILEIN freyberg6.ats
 END Options
 
 BEGIN Dimensions
