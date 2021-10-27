@@ -37,10 +37,18 @@ keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2
 keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
 keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}$"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
-forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
-forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
+
+# forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
+# forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
+# forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
+# forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
+
+forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
+            "cum_mass_usecol:wel_out","inc_mass_usecol:wel_out",]
+forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
+                   "incremental well mass removed"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
-forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
+forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$ug$","$\\frac{ug}{d}$"]
 
 keep_sngl_lyr = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:0_i:2_j:9', 'arrobs_head_k:0_i:33_j:7', 'sfr_usecol:gage_1']
 sngl_lyr_dct = {k:l for k,l in zip(keep_sngl_lyr,keep)}
@@ -962,6 +970,23 @@ def monthly_ies_to_da(org_d,include_est_states=False):
         pst.parameter_data.loc[df.parnme, "cycle"] = cy
         pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
 
+        # write a CNC template file
+    with open(os.path.join(t_d, "freyberg6_trns.cnc.tpl"), 'w') as f:
+        f.write("ptf  ~\n")
+        # f.write("BEGIN Options\n  TIME_UNITS  days\n  ATS6 FILEIN freyberg6.ats\nEND Options\n")
+        f.write("BEGIN Options\n  SAVE_FLOWS\nEND Options\n")
+        f.write("BEGIN Dimensions\n  MAXBOUND  1\nEND Dimensions\n")
+        f.write("BEGIN PERIOD 1\n  1 15 3 ~  concval  ~\nEND PERIOD\n")
+    cnc_tpl = os.path.join(t_d, "freyberg6_trns.cnc.tpl")
+    cnc_in = os.path.join(t_d, "freyberg6_trns.cnc")
+    cnc_tpl_cycle = [0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0,
+                     1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0,
+                     1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0]
+
+    df = pst.add_parameters(cnc_tpl, cnc_in, pst_path=".")
+    pst.parameter_data.loc[df.parnme, "cycle"] = -1
+    pst.parameter_data.loc[df.parnme, "partrans"] = "fixed"
+
     # #add dummy parameter for ats
     # with open(os.path.join(t_d, "ats.txt.tpl"), 'w') as f:
     #     f.write("ptf  ~\n")
@@ -979,6 +1004,7 @@ def monthly_ies_to_da(org_d,include_est_states=False):
     pdf = pd.DataFrame(index=['perlen'], columns=np.arange(org_sim.tdis.nper.data))
     pdf.loc['perlen', :] = pers
     # pdf.loc['ats_flag',:] = ats_tpl_cycle
+    pdf.loc['concval',:] = cnc_tpl_cycle
     pdf.to_csv(os.path.join(t_d, "par_cycle_table.csv"))
     pst.pestpp_options["da_parameter_cycle_table"] = "par_cycle_table.csv"
 
@@ -1498,6 +1524,7 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
             ognames.extend(forecast)
             label_dict = keep_dict.copy()
             label_dict.update(forecast_dict)
+
 
             is_1_lay = True
             if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
@@ -2304,8 +2331,8 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    # compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
-    #                    run_ies=True,run_da=True,adj_init_states=True)
+    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
+                       run_ies=True,run_da=True,adj_init_states=True)
     # exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
