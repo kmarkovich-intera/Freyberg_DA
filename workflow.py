@@ -2308,30 +2308,30 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    #sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    #add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
 
-    # c_d = setup_interface("daily_model_files_trnsprt_newstress")
-    # m_c_d = run_complex_prior_mc(c_d)
+    #c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    #m_c_d = run_complex_prior_mc(c_d,num_workers=10)
 
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress")
+    #b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
-    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    #s_d = monthly_ies_to_da(b_d,include_est_states=False)
 
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
     # exit()
     # c_d = setup_interface("daily_model_files")
-    # m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
+    #m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
     # m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=4)
     # exit()
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=4, num_replicates=10,num_reals=50,use_sim_states=True,
+    compare_mf6_freyberg(num_workers=15, num_replicates=50,num_reals=50,use_sim_states=True,
                        run_ies=True,run_da=True,adj_init_states=True)
     # exit()
     plot_obs_v_sim2()
