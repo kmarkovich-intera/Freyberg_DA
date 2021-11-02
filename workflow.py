@@ -1790,6 +1790,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                     s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
 
                     cval = sgobs.loc[oname,"obsval"]
+                    if "mass" in oname or "conc" in oname:
+                        if np.abs(cval) > 1.0e+6:
+                            continue
                     weight = sgobs.loc[oname,"weight"]
                     print(ireal,oname,cval)
 
@@ -2325,14 +2328,14 @@ if __name__ == "__main__":
     # exit()
     # c_d = setup_interface("daily_model_files")
     #m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
-    # m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=4)
+    #m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=15)
     # exit()
     #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=15, num_replicates=50,num_reals=50,use_sim_states=True,
-                       run_ies=True,run_da=True,adj_init_states=True)
+    #compare_mf6_freyberg(num_workers=25, num_replicates=50,num_reals=50,use_sim_states=True,
+    #                   run_ies=True,run_da=True,adj_init_states=True)
     # exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
