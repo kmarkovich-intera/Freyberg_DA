@@ -34,7 +34,7 @@ da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
 keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
-keep_labels = ["gw_3","gw_2","gw_1","sw_1"]
+keep_labels = ["gw_1","gw_2","gw_3","sw_1"]
 keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}$"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 
@@ -44,11 +44,11 @@ keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 # forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
 forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
-            "cum_mass_usecol:wel_out","inc_mass_usecol:wel_out",]
+            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:33_j:7",]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
-                   "incremental well mass removed"]
+                   "gw_1 conc"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
-forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$ug$","$\\frac{ug}{d}$"]
+forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$mg$","$\\frac{mg}{L}$"]
 
 keep_sngl_lyr = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:0_i:2_j:9', 'arrobs_head_k:0_i:33_j:7', 'sfr_usecol:gage_1']
 sngl_lyr_dct = {k:l for k,l in zip(keep_sngl_lyr,keep)}
