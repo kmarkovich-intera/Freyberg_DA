@@ -4,31 +4,6 @@ BEGIN options
 END options
 
 BEGIN continuous  FILEOUT  concs.csv
-  arrobs_conc_k:2_i:2_j:15   CONCENTRATION  3 9 48
-  arrobs_conc_k:2_i:2_j:9    CONCENTRATION  3 9 30
-  arrobs_conc_k:2_i:3_j:8    CONCENTRATION  3 12 27
-  arrobs_conc_k:2_i:9_j:1    CONCENTRATION  3 30 6
-  arrobs_conc_k:2_i:13_j:10  CONCENTRATION  3 42 33
-  arrobs_conc_k:2_i:15_j:16  CONCENTRATION  3 48 51
-  arrobs_conc_k:2_i:21_j:10  CONCENTRATION  3 66 33
-  arrobs_conc_k:2_i:22_j:15  CONCENTRATION  3 69 48
-  arrobs_conc_k:2_i:24_j:4   CONCENTRATION  3 75 15
-  arrobs_conc_k:2_i:26_j:6   CONCENTRATION  3 81 21
-  arrobs_conc_k:2_i:29_j:15  CONCENTRATION  3 90 48
-  arrobs_conc_k:2_i:33_j:7   CONCENTRATION  3 102 24
-  arrobs_conc_k:2_i:34_j:10  CONCENTRATION  3 105 33
-  arrobs_conc_k:0_i:2_j:15   CONCENTRATION  1 9 48
-  arrobs_conc_k:0_i:2_j:9    CONCENTRATION  1 9 30
-  arrobs_conc_k:0_i:3_j:8    CONCENTRATION  1 12 27
-  arrobs_conc_k:0_i:9_j:1    CONCENTRATION  1 30 6
-  arrobs_conc_k:0_i:13_j:10  CONCENTRATION  1 42 33
-  arrobs_conc_k:0_i:15_j:16  CONCENTRATION  1 48 51
-  arrobs_conc_k:0_i:21_j:10  CONCENTRATION  1 66 33
-  arrobs_conc_k:0_i:22_j:15  CONCENTRATION  1 69 48
-  arrobs_conc_k:0_i:24_j:4   CONCENTRATION  1 75 15
-  arrobs_conc_k:0_i:26_j:6   CONCENTRATION  1 81 21
-  arrobs_conc_k:0_i:29_j:15  CONCENTRATION  1 90 48
-  arrobs_conc_k:0_i:33_j:7   CONCENTRATION  1 102 24
-  arrobs_conc_k:0_i:34_j:10  CONCENTRATION  1 105 33
+  arrobs_conc_k:2_i:26_j:11   CONCENTRATION  3 81 36
 END continuous  FILEOUT  concs.csv
 

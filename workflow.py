@@ -44,9 +44,9 @@ keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 # forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
 forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
-            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:33_j:7",]
+            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
-                   "gw_1 conc"]
+                   "gw conc"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$mg$","$\\frac{mg}{L}$"]
 
@@ -2328,8 +2328,8 @@ if __name__ == "__main__":
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
 
-    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    m_c_d = run_complex_prior_mc(c_d,num_workers=10)
+    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=100)
+    m_c_d = run_complex_prior_mc(c_d,num_workers=12)
 
     b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     #reduce_simple_forcing_pars("monthly_model_files_template")
@@ -2347,7 +2347,7 @@ if __name__ == "__main__":
     #plot_prior_mc()
     #exit()
     #
-    compare_mf6_freyberg(num_workers=15, num_replicates=50,num_reals=50,use_sim_states=True,
+    compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
                        run_ies=True,run_da=True,adj_init_states=True)
     # exit()
     plot_obs_v_sim2()
