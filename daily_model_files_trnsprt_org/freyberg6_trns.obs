@@ -1,0 +1,9 @@
+BEGIN options
+  DIGITS  10
+  PRINT_INPUT
+END options
+
+BEGIN continuous  FILEOUT  concs.csv
+  arrobs_conc_k:2_i:26_j:11   CONCENTRATION  3 81 36
+END continuous  FILEOUT  concs.csv
+

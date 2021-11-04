@@ -44,9 +44,9 @@ keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 # forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
 forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
-            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:33_j:7",]
+            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
-                   "gw_1 conc"]
+                   "gw conc"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$mg$","$\\frac{mg}{L}$"]
 
@@ -568,6 +568,12 @@ def setup_interface(org_ws, num_reals=10):
                         index_cols="time", use_cols=list(df.columns.values),
                         prefix="hds")
 
+    # add observations for the concs observation output file
+    df = pd.read_csv(os.path.join(template_ws, "concs.csv"), index_col=0)
+    pf.add_observations("concs.csv", insfile="concs.csv.ins",
+                        index_cols="time", use_cols=list(df.columns.values),
+                        prefix="cnc")
+
     # add observations for simulated hds states
     pf.add_py_function("workflow.py", "extract_hds_state_obs()", is_pre_cmd=False)
     fnames = test_extract_hds_state_obs(template_ws)
@@ -1017,6 +1023,12 @@ def monthly_ies_to_da(org_d,include_est_states=False):
     fname_ins = fname + ".ins"
     pst.drop_observations(os.path.join(t_d, fname_ins), '.')
 
+    # now drop all existing heads concs package observations since
+    # those will be replaced by the state obs
+    fname = 'concs.csv'
+    fname_ins = fname + ".ins"
+    pst.drop_observations(os.path.join(t_d, fname_ins), '.')
+
     # fix the sfr and list instruction files - only need one output time
     fname = 'sfr.csv'
     ins_names = ["sfr.csv.ins","sft.csv.ins","cum_mass.dat.ins","cum_flow.dat.ins","inc_mass.dat.ins","inc_flow.dat.ins"]
@@ -1375,6 +1387,7 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             cvals = cvals.loc[d]
             kk = k.replace("k:2", "k:0")
             cvals.index = cvals.index.map(lambda x: x.replace("k:2", "k:0") if kk in x else x)
+    print(cvals)
     obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
     assert obs.obsval.shape[0] == obs.obsval.dropna().shape[0]
     assert cvals.loc[bpst.obs_names].shape[0] == cvals.loc[bpst.obs_names].dropna().shape[0]
@@ -2309,23 +2322,26 @@ def reduce_to_layer_pars(t_d):
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
 
+# def make_prop_histograms():
+
+
 if __name__ == "__main__":
 
-    #sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    #add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
 
-    #c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    #m_c_d = run_complex_prior_mc(c_d,num_workers=10)
+    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=100)
+    m_c_d = run_complex_prior_mc(c_d,num_workers=12)
 
-    #b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     #reduce_simple_forcing_pars("monthly_model_files_template")
     # reduce_to_layer_pars("monthly_model_files_template")
-    #s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    s_d = monthly_ies_to_da(b_d,include_est_states=False)
 
-    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-    # exit()
+    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+
     # c_d = setup_interface("daily_model_files")
     #m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
     #m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=15)
@@ -2336,6 +2352,8 @@ if __name__ == "__main__":
     #
     #compare_mf6_freyberg(num_workers=25, num_replicates=50,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
+    compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
+                       run_ies=True,run_da=True,adj_init_states=True)
     # exit()
     plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
