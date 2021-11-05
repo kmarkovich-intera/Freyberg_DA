@@ -4,6 +4,6 @@ BEGIN options
 END options
 
 BEGIN continuous  FILEOUT  concs.csv
-  arrobs_conc_k:2_i:26_j:11   CONCENTRATION  3 81 36
+  arrobs_conc_k:0_i:26_j:11   CONCENTRATION  3 81 36
 END continuous  FILEOUT  concs.csv
 

@@ -822,8 +822,6 @@ def setup_interface(org_ws, num_reals=10):
     obs.loc[state_obs.obsnme, "state_par_link"] = state_obs.apply(lambda x: state_par_dict.get((x.kij), np.nan), axis=1)
     print(obs.state_par_link.dropna().shape)
 
-    keep = ['arrobs_head_k:0_i:22_j:15', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'gage_1']
-
     # write the control file
     pst.write(os.path.join(pf.new_d, "freyberg.pst"),version=2)
 
@@ -1388,6 +1386,8 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             kk = k.replace("k:2", "k:0")
             cvals.index = cvals.index.map(lambda x: x.replace("k:2", "k:0") if kk in x else x)
     print(cvals)
+    d = set(bpst.obs_names) - set(cvals.index.tolist())
+    print(d)
     obs.loc[:,"obsval"] = cvals.loc[bpst.obs_names]
     assert obs.obsval.shape[0] == obs.obsval.dropna().shape[0]
     assert cvals.loc[bpst.obs_names].shape[0] == cvals.loc[bpst.obs_names].dropna().shape[0]
@@ -2327,38 +2327,30 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    # make_muted_recharge(s_d = 'monthly_model_files_1lyr_newstress',c_d="daily_model_files_newstress")
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=100)
+    # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=100)
+    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
+    # plot_prior_mc()
+    # b_d = "monthly_model_files_template"
+    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
 
-    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=100)
-    m_c_d = run_complex_prior_mc(c_d,num_workers=12)
 
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    #reduce_simple_forcing_pars("monthly_model_files_template")
-    # reduce_to_layer_pars("monthly_model_files_template")
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
-
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-
-    # c_d = setup_interface("daily_model_files")
-    #m_b_d = run_bat_prior_mc("monthly_model_files_template", num_workers=4)
-    #m_c_d = run_complex_prior_mc("daily_model_files_template",num_workers=15)
-    # exit()
-    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d,s_d)
-    #plot_prior_mc()
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=25, num_replicates=50,num_reals=50,use_sim_states=True,
-    #                   run_ies=True,run_da=True,adj_init_states=True)
-    compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
+    compare_mf6_freyberg(num_workers=25, num_replicates=100,num_reals=50,use_sim_states=True,
                        run_ies=True,run_da=True,adj_init_states=True)
-    # exit()
-    plot_obs_v_sim2()
+    #compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
+    #                   run_ies=True,run_da=True,adj_init_states=True)
+    exit()
+    #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     # invest()
