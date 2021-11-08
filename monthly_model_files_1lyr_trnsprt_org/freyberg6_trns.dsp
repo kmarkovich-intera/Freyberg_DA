@@ -5,8 +5,8 @@ END options
 
 BEGIN griddata
   ALH
-    CONSTANT 0.0
+    CONSTANT 25.0
   ATH1
-    CONSTANT 0.0
+    CONSTANT 2.5
 END griddata
 
