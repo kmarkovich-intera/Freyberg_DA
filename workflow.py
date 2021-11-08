@@ -434,29 +434,16 @@ def plots_obs_v_sim():
 
 
 def invest():
-    csim = flopy.mf6.MFSimulation.load(sim_ws="complex_template")
-    cm = csim.get_model("freyberg6")
-    ssim = flopy.mf6.MFSimulation.load(sim_ws="simple_template_ies")
-    sm = ssim.get_model("freyberg6")
-    ctotim = np.cumsum(csim.tdis.perioddata.array["perlen"])
-    stotim = np.cumsum(ssim.tdis.perioddata.array["perlen"])
-
-    # for kper in range(csim.tdis.nper):
-    #     carr = cm.wel.stress_period_data.array[kper]
-    # print(carr)
-    # return
-
-    carr = cm.rch.recharge.array
-    carr = carr.mean(axis=(1, 2, 3))
-    sarr = sm.rch.recharge.array
-    sarr = sarr.mean(axis=(1, 2, 3))
-    print(sarr.shape, stotim.shape)
-    print(carr.shape, ctotim.shape)
-
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-    ax.plot(stotim[1:], sarr[1:])
-    ax.plot(ctotim[1:], carr[1:])
-    plt.show()
+    m_d = "daily_model_files_master_prior"
+    pst = pyemu.Pst(os.path.join(m_d,"freyberg.pst"))
+    pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(m_d,"prior.jcb"))
+    print(pe.shape,pst.npar)
+    pst.parameter_data.loc[pe.columns.values,"parval1"] = pe._df.loc["0",:]
+    pst.control_data.noptmax = 0
+    pst.write(os.path.join(m_d,"test.pst"))
+    #pyemu.os_utils.run("pestpp-ies test.pst",cwd=m_d)
+    oe = pd.read_csv(os.path.join(m_d,"freyberg.0.obs.csv"),index_col=0)
+    print(oe.loc[:,oe.columns.map(lambda x: "cum_mass_usecol:wel" in x)].mean().values)
 
 
 def test_extract_state_obs(t_d):
@@ -1498,7 +1485,8 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
     #cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
     cobs.loc[:, "time"] = cobs.time.apply(float)
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
-
+    cw_cols = c_oe.columns.map(lambda x: "mass" in x)
+    c_oe.loc[:,cw_cols] = c_oe.loc[:,cw_cols].apply(np.log10)
     pname = os.path.join(subdir,"obs_v_sim.pdf")
     if post_iter is not None:
         pname = os.path.join(subdir,"obs_v_sim_postier_{0}.pdf".format(post_iter))
@@ -1512,12 +1500,14 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
             try:
                 s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
                 s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+                sw_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x)
+                s_b_oe_pr.loc[:,sw_cols] = s_b_oe_pr.loc[:,sw_cols].apply(np.log10)
                 bpost_iter = s_b_pst.control_data.noptmax
                 if post_iter is not None:
                     bpost_iter = post_iter
                 s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
                                         index_col=0)
-
+                s_b_oe_pt.loc[:, sw_cols] = s_b_oe_pt.loc[:, sw_cols].apply(np.log10)
                 s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
                 seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
                 spost_iter = s_s_pst.control_data.noptmax
@@ -1529,6 +1519,15 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 s_s_oe_dict_pr = {int(f.split(".")[1]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files_pr}
                 s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
                                   seq_oe_files_pt}
+                for key,df in s_s_oe_dict_pr.items():
+                    log_cols = df.columns.map(lambda x: "mass" in x)
+                    df.loc[:,log_cols] = df.loc[:,log_cols].apply(np.log10)
+                    s_s_oe_dict_pr[key] = df
+                for key, df in s_s_oe_dict_pt.items():
+                    log_cols = df.columns.map(lambda x: "mass" in x)
+                    df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                    s_s_oe_dict_pt[key] = df
+
             except:
                 break
 
@@ -1544,12 +1543,18 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 is_1_lay = False
 
             for ogname in ognames:
+                if "cum" not in ogname:
+                    continue
                 k0name = ogname
                 if is_1_lay:
                     k0ogname = ogname.replace("k:2","k:0")
                 fig, axes = plt.subplots(2, 1, figsize=(8, 8))
                 cgobs = cobs.loc[cobs.obsnme.str.contains(ogname),:].copy()
                 sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname),:].copy()
+                if cgobs.shape[0] == 0:
+                   raise Exception("complex empty "+ogname)
+                if sgobs.shape[0] == 0:
+                    raise Exception("batch empty "+k0ogname+","+ogname)
 
                 sgobs.loc[:,"time"] = sgobs.time.apply(float)
                 cgobs.loc[:, "time"] = cgobs.time.apply(float)
@@ -1791,7 +1796,7 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             sgobs.sort_values(by="time", inplace=True)
-            figall,axesall = fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+            figall,axesall = plt.subplots(2, 2, figsize=(8, 8))
             for itime,oname in enumerate(sgobs.obsnme):
 
                 fig, axes = plt.subplots(2, 2, figsize=(8, 6))
@@ -1832,9 +1837,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                                         color="b", alpha=0.5, lw=lw)
 
                         axesall[1, 0].scatter(mn, cval,
-                                              marker="o", color="b", alpha=0.5,s=size)
+                                              marker="o", color="b", alpha=0.5,s=size,zorder=10)
                         axesall[1, 0].plot([lq, uq], [cval, cval],
-                                           color="b", alpha=0.5, lw=lw)
+                                           color="b", alpha=0.5, lw=lw,zorder=10)
 
 
                     else:
@@ -1844,7 +1849,7 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                         axesall[0,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
                                    color="0.5", alpha=0.5,s=size)
                         axesall[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
-                                   color="b",alpha=0.5,s=size)
+                                   color="b",alpha=0.5,s=size,zorder=10)
 
                     seq_name = k0ogname
                     if "arrobs" not in k0ogname:
@@ -1916,9 +1921,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                         else:
 
                             axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
-                                       alpha=0.5,s=size)
+                                       alpha=0.5,s=size,zorder=10)
                             axesall[1,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
-                                       alpha=0.5,s=size)
+                                       alpha=0.5,s=size,zorder=10)
                     elif itime in s_s_oe_dict_pr:
                         oe = s_s_oe_dict_pr[itime]
                         if summarize:
@@ -2335,25 +2340,25 @@ if __name__ == "__main__":
     # s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
     # plot_prior_mc()
-    # b_d = "monthly_model_files_template"
-    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    #b_d = "monthly_model_files_template"
+    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
 
 
     #exit()
     #
-    compare_mf6_freyberg(num_workers=25, num_replicates=100,num_reals=50,use_sim_states=True,
-                       run_ies=True,run_da=True,adj_init_states=True)
+    #compare_mf6_freyberg(num_workers=25, num_replicates=100,num_reals=50,use_sim_states=True,
+    #                   run_ies=True,run_da=True,adj_init_states=True)
     #compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
-    exit()
-    #plot_obs_v_sim2()
+    #exit()
+    plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
     #plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
-    # invest()
+    #invest()
     #clean_results("naive_50reals_eststates")
     exit()
 
