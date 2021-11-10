@@ -2357,15 +2357,75 @@ def reduce_to_layer_pars(t_d):
     pst.control_data.noptmax = -1
     pst.write(os.path.join(t_d,"freyberg.pst"),version=2)
 
-# def make_prop_histograms():
+def make_prop_histograms(subdir="."):
+    c_m_d = "daily_model_files_master_prior"
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    cobs = c_pst.observation_data
+    cobs = cobs.loc[cobs.obsnme.str.startswith("arrobs_hk"), :]
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    c_hk = c_oe.loc[:,cobs.obsnme]
+    c_hk_means = c_hk.mean(axis=1)
+    c_hk_sds = c_hk.std(axis=1)
 
+    bat_hk_means = []
+    bat_hk_sds = []
+    seq_hk_means = []
+    seq_hk_sds = []
+
+    for ireal in range(6):
+        s_b_m_d = os.path.join(subdir, "monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join(subdir, "seq_monthly_model_files_master_{0}".format(ireal))
+
+        # try:
+        s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+        sobs = s_b_pst.observation_data
+        sobs = sobs.loc[sobs.obsnme.str.startswith("arrobs_hk"), :]
+        s_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.3.obs.csv"), index_col=0)
+        s_hk = s_oe.loc[:, sobs.obsnme]
+        s_hk_mn = s_hk.stack().mean()
+        s_hk_sd = s_hk.stack().std()
+        bat_hk_means.append(s_hk_mn)
+        bat_hk_sds.append(s_hk_sd)
+
+        s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+        sobs = s_s_pst.observation_data
+        sobs = sobs.loc[sobs.obsnme.str.startswith("arrobs_hk"), :]
+        s_oe = pd.read_csv(os.path.join(s_s_m_d, "freyberg.24.0.obs.csv"), index_col=0)
+        s_hk = s_oe.loc[:, sobs.obsnme]
+        s_hk_mn = s_hk.stack().mean()
+        s_hk_sd = s_hk.stack().std()
+        seq_hk_means.append(s_hk_mn)
+        seq_hk_sds.append(s_hk_sd)
+
+    with PdfPages('hk_hists.pdf') as pdf:
+        fig, axes = plt.subplots(2, 2, figsize=(8, 10))
+        axes[0, 0].hist(c_hk_means, color='red',alpha =0.5)
+        axes[0, 0].hist(seq_hk_means,color='blue',alpha =0.5)
+        axes[1, 0].hist(c_hk_sds, color='red',alpha =0.5)
+        axes[1, 0].hist(seq_hk_sds,color='blue',alpha =0.5)
+        axes[0, 1].hist(c_hk_means, color='red',alpha =0.5)
+        axes[0, 1].hist(bat_hk_means,color='blue',alpha =0.5)
+        axes[1, 1].hist(c_hk_sds, color='red',alpha =0.5)
+        axes[1, 1].hist(bat_hk_sds,color='blue',alpha =0.5)
+        axes[0, 0].set_title("A) sequential HK first moment", loc="left")
+        axes[1, 0].set_title("C) sequential HK second moment", loc="left")
+        axes[0, 1].set_title("B) batch HK first moment", loc="left")
+        axes[1, 1].set_title("D) batch HK second moment", loc="left")
+
+        for ax in axes.flatten():
+            ax.set_xlim(0, 100)
+            ax.set_ylim(0, 20)
+            ax.set_ylabel("frequency")
+            ax.set_xlabel("Mean HK (ft/d)")
+        pdf.savefig()
+        plt.close(fig)
 
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    m_c_d = run_complex_prior_mc(c_d,num_workers=12)
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
     # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     # s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
@@ -2390,6 +2450,7 @@ if __name__ == "__main__":
 
     #invest()
     #clean_results("naive_50reals_eststates")
+    make_prop_histograms()
     exit()
 
 
