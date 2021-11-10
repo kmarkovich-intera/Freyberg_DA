@@ -471,6 +471,30 @@ def test_extract_hds_state_obs(t_d):
     os.chdir(cwd)
     return fnames
 
+def extract_HK():
+    HK_lay1 = np.loadtxt('freyberg6.npf_k_layer1.txt')
+    try:
+        HK_lay2 = np.loadtxt('freyberg6.npf_k_layer2.txt')
+    except:
+        print('no layer 2')
+    try:
+        HK_lay3 = np.loadtxt('freyberg6.npf_k_layer3.txt')
+    except:
+        print('no layer 3')
+    try:
+        HK_lay1 = (HK_lay1 + HK_lay2 + HK_lay3)/3
+    except:
+        print('just a single layer model in a multilayer world')
+
+    np.savetxt('HK.txt', HK_lay1, fmt='%15.6E')
+
+def test_extract_HK(t_d):
+    cwd = os.getcwd()
+    os.chdir(t_d)
+    fnames = extract_HK()
+    os.chdir(cwd)
+    return fnames
+
 def extract_conc_state_obs():
     ucn = flopy.utils.HeadFile('freyberg6_trns.ucn', precision="double", text="CONCENTRATION")
     arr = ucn.get_data()
@@ -487,7 +511,6 @@ def test_extract_conc_state_obs(t_d):
     fnames = extract_conc_state_obs()
     os.chdir(cwd)
     return fnames
-
 
 def setup_interface(org_ws, num_reals=10):
     """copied from auto_pest.py
@@ -560,6 +583,13 @@ def setup_interface(org_ws, num_reals=10):
     pf.add_observations("concs.csv", insfile="concs.csv.ins",
                         index_cols="time", use_cols=list(df.columns.values),
                         prefix="cnc")
+
+    # add observations for the simulated K values
+    #note that for the complex model, this is the avg of the 3 layers
+    pf.add_py_function("workflow.py","extract_HK()", is_pre_cmd=False)
+    test_extract_HK(template_ws)
+    prefix = "HK_k:1"
+    pf.add_observations('HK.txt', prefix=prefix, obsgp=prefix)
 
     # add observations for simulated hds states
     pf.add_py_function("workflow.py", "extract_hds_state_obs()", is_pre_cmd=False)
@@ -2332,35 +2362,36 @@ def reduce_to_layer_pars(t_d):
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=100)
-    # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=100)
+    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    m_c_d = run_complex_prior_mc(c_d,num_workers=12)
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     # s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
     # plot_prior_mc()
     #b_d = "monthly_model_files_template"
-    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
 
 
     #exit()
     #
     #compare_mf6_freyberg(num_workers=25, num_replicates=100,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
-    #compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
+    # compare_mf6_freyberg(num_workers=12, num_replicates=50,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
     #exit()
-    plot_obs_v_sim2()
+    # plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    # plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     #invest()
     #clean_results("naive_50reals_eststates")
     exit()
+
 
     # BOOLEANS TO SELECT CODE BLOCKS BELOW
     prep_complex_model = False  # do this once before running paired simple/complex analysis
