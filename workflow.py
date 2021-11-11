@@ -1206,11 +1206,19 @@ def plot_prior_mc():
 
     s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
     c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    log = c_oe.columns.map(lambda x: "mass" in x)
+    c_oe.loc[:,log] = c_oe.loc[:,log].apply(np.log10)
     s_b_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+    log = s_b_oe.columns.map(lambda x: "mass" in x)
+    s_b_oe.loc[:, log] = s_b_oe.loc[:, log].apply(np.log10)
 
     s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
     seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
     s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
+    for key,df in s_s_oe_dict.items():
+        log = df.columns.map(lambda x: "mass" in x)
+        df.loc[:, log] = df.loc[:, log].apply(np.log10)
+        s_s_oe_dict[key] = df
     #oct = pd.read_csv(os.path.join(s_s_m_d,"obs_cycle_tbl.csv"),index_col=0)
 
     #ognames = list(cobs.obgnme.unique())
@@ -1543,8 +1551,8 @@ def plot_obs_v_sim2(subdir=".",post_iter=None):
                 is_1_lay = False
 
             for ogname in ognames:
-                if "cum" not in ogname:
-                    continue
+                #if "cum" not in ogname:
+                #    continue
                 k0name = ogname
                 if is_1_lay:
                     k0ogname = ogname.replace("k:2","k:0")
@@ -1729,11 +1737,17 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
         try:
             s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
             s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+
             bpost_iter = s_b_pst.control_data.noptmax
             if post_iter is not None:
                 bpost_iter = post_iter
             s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
                                     index_col=0)
+            log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
+
 
             s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
             seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
@@ -1749,6 +1763,20 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
                               seq_oe_files_pt}
 
+            for key,df in s_s_oe_dict_pr.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+
+
+                df.loc[:,log_cols] = df.loc[:,log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pr[key] = df
+
+            for key, df in s_s_oe_dict_pt.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pt[key] = df
+
             s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
             s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
 
@@ -1763,8 +1791,8 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             break
 
     obs = s_s_pst.observation_data
-    sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
-    par = s_s_pst.parameter_data
+    #sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
+    #par = s_s_pst.parameter_data
     #sfpar = par.loc[pd.notna(par.state_par_link),:]
     #sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
 
@@ -1788,7 +1816,8 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
 
     with PdfPages(pname) as pdf:
         for ogname in ognames:
-
+            #if "mass" not in ogname:
+            #    continue
             k0ogname = ogname
             if is_1_lay:
                 k0ogname = ogname.replace("k:2","k:0")
@@ -1798,7 +1827,8 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             sgobs.sort_values(by="time", inplace=True)
             figall,axesall = plt.subplots(2, 2, figsize=(8, 8))
             for itime,oname in enumerate(sgobs.obsnme):
-
+                #if itime != 3:
+                #    continue
                 fig, axes = plt.subplots(2, 2, figsize=(8, 6))
                 for ireal in ireals:
                     s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
@@ -1807,9 +1837,13 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
 
                     s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
 
-                    cval = sgobs.loc[oname,"obsval"]
-                    if "mass" in oname or "conc" in oname:
-                        if np.abs(cval) > 1.0e+6:
+                    cval = sgobs.loc[oname,"obsval"].copy()
+                    if "conc" in oname:
+                        if np.abs(cval) > 1.0e+10:
+                            continue
+                    if "mass" in oname or "cnc" in oname:
+                        cval = np.log10(cval)
+                        if ~np.isfinite(cval):
                             continue
                     weight = sgobs.loc[oname,"weight"]
                     print(ireal,oname,cval)
@@ -1858,9 +1892,12 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                     if itime in s_s_oe_dict_pr:
                         oe = s_s_oe_dict_pr[itime]
                         if summarize:
-                            mn = oe.loc[:, seq_name].mean()
-                            lq = oe.loc[:, seq_name].quantile(0.05)
-                            uq = oe.loc[:, seq_name].quantile(0.95)
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                            if itime == 3:
+                                if ~np.isfinite(mn):
+                                    print("seq",itime,seq_name,cval,mn,lq,uq)
                             axes[0, 1].scatter(mn, cval,
                                                marker="o", color="0.5", alpha=0.5,s=size)
                             axes[0, 1].plot([lq, uq], [cval, cval],
@@ -1906,9 +1943,9 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
                     if itime in s_s_oe_dict_pt:
                         oe = s_s_oe_dict_pt[itime]
                         if summarize:
-                            mn = oe.loc[:, seq_name].mean()
-                            lq = oe.loc[:, seq_name].quantile(0.05)
-                            uq = oe.loc[:, seq_name].quantile(0.95)
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
                             axes[1, 1].scatter(mn, cval,
                                                marker="o", color="b", alpha=0.5,s=size)
                             axes[1, 1].plot([lq, uq], [cval, cval],
@@ -2339,7 +2376,7 @@ if __name__ == "__main__":
     # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=100)
     # s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
-    # plot_prior_mc()
+    #plot_prior_mc()
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     #s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
@@ -2352,10 +2389,10 @@ if __name__ == "__main__":
     #compare_mf6_freyberg(num_workers=4, num_replicates=100,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
     #exit()
-    plot_obs_v_sim2()
+    #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     #invest()
