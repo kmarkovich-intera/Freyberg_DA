@@ -2346,16 +2346,13 @@ def reduce_simple_forcing_pars(t_d):
     grrch_par = par.loc[par.parnme.str.startswith("m_rch_gr"),"parnme"]
     par.loc[grrch_par,"partrans"] = "fixed"
     pe.loc[:,grrch_par] = 1.0
-    crch_par = par.loc[par.parnme.str.startswith("d_const_rch"),:].copy()
-    crch_par.loc[:,"sp"] = crch_par.parnme.apply(lambda x: int(x.split('_')[4]))
 
-    #tie_crch_par = crch_par.loc[crch_par.sp.apply(lambda x: x not in [1,2]),"parnme"]
-    #tie_crch_par = crch_par.loc[crch_par.sp != 1,"parnme"]
-    tie_crch_par = crch_par.parnme
-    val = crch_par.loc[tie_crch_par,"parval1"].mean()
-    #pe.drop(labels=tie_crch_par,axis=1,inplace=True)
-    pe.loc[:,tie_crch_par] = val
-    par.loc[tie_crch_par,"partrans"] = "fixed"
+    #crch_par = par.loc[par.parnme.str.startswith("d_const_rch"),:].copy()
+    #crch_par.loc[:,"sp"] = crch_par.parnme.apply(lambda x: int(x.split('_')[4]))
+    #tie_crch_par = crch_par.parnme
+    #val = crch_par.loc[tie_crch_par,"parval1"].mean()
+    #pe.loc[:,tie_crch_par] = val
+    #par.loc[tie_crch_par,"partrans"] = "fixed"
     #par.loc[tie_crch_par, "partied"] = "d_const_rch_recharge_2_cn_inst:0"
 
     pe.to_binary(os.path.join(t_d, "prior_reduced.jcb"))
@@ -2459,14 +2456,16 @@ def make_prop_histograms(subdir="."):
 
 if __name__ == "__main__":
 
-    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
-    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
-    #plot_prior_mc()
+    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+    reduce_simple_forcing_pars(b_d)
+    s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
+    #m_c_d = run_complex_prior_mc(c_d,num_workers=12)
+ 
+    plot_prior_mc()
     #b_d = "monthly_model_files_template"
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
@@ -2479,15 +2478,15 @@ if __name__ == "__main__":
     # compare_mf6_freyberg(num_workers=12, num_replicates=50,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
     #exit()
-]    #plot_obs_v_sim2()
+    #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    plot_s_vs_s(summarize=True)
+    #plot_s_vs_s(summarize=True)
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     #invest()
     #clean_results("naive_50reals_eststates")
-    make_prop_histograms()
+    #make_prop_histograms()
     exit()
 
 
