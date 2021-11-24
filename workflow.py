@@ -11,6 +11,7 @@ import platform
 import pyemu
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
+import matplotlib as mpl
 import flopy
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -43,10 +44,12 @@ keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 # forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 # forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
 
-forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
-            "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
-forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
-                   "gw conc"]
+# forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
+#             "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
+# forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
+#                   "gw conc"]
+forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
+forecast_labels = ["tailwater\nsw-gw exchg","headwater\nsw-gw exchg","gw forecast"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$","$mg$","$\\frac{mg}{L}$"]
 
@@ -1205,12 +1208,10 @@ def run_batch_seq_prior_monte_carlo(b_d,s_d):
 
 
 
-def plot_prior_mc():
+def plot_prior_mc_all():
     """plot the prior monte carlo results for daily, monthly batch and monthly sequential
 
     """
-
-
 
     ognames = keep.copy()
     ognames.extend(forecast)
@@ -2329,23 +2330,29 @@ def make_muted_recharge(s_d = 'monthly_model_files_1lyr_org',c_d = 'daily_model_
         df.to_csv(os.path.join(s_d_new, rch_file), header=False, index=False, sep=" ")
 
 
-def reduce_simple_forcing_pars(t_d):
+def reduce_simple_pars(t_d):
     pst = pyemu.Pst(os.path.join(t_d,"freyberg.pst"))
     pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(t_d,"prior.jcb"))
     par = pst.parameter_data
+
+    # fix all but constant hks
+    hk_pars = par.loc[par.apply(lambda x: "npf_k" in x.parnme and "_cn" not in x.parnme and x.partrans != "fixed",axis=1),"parnme"]
+    par.loc[hk_pars,"partrans"] = "fixed"
+    pe.loc[:,hk_pars] = 1.0
+
     # fix all adjustable transient wel pars
-    twel_par = par.loc[par.apply(lambda x: x.parnme.startswith("twel_mlt") and x.partrans != "fixed",axis=1),"parnme"]
-    par.loc[twel_par,"partrans"] = "fixed"
-    pe.loc[:,twel_par] = 1.0
+    #twel_par = par.loc[par.apply(lambda x: x.parnme.startswith("twel_mlt") and x.partrans != "fixed",axis=1),"parnme"]
+    #par.loc[twel_par,"partrans"] = "fixed"
+    #pe.loc[:,twel_par] = 1.0
 
     # fix all adjustable grid wel pars
-    grwel_par = par.loc[par.parnme.str.startswith("wel_grid"),"parnme"]
-    pe.loc[:,grwel_par] = 1.0
-    par.loc[grwel_par,"partrans"] = "fixed"
+    #grwel_par = par.loc[par.parnme.str.startswith("wel_grid"),"parnme"]
+    #pe.loc[:,grwel_par] = 1.0
+    #par.loc[grwel_par,"partrans"] = "fixed"
 
-    grrch_par = par.loc[par.parnme.str.startswith("m_rch_gr"),"parnme"]
-    par.loc[grrch_par,"partrans"] = "fixed"
-    pe.loc[:,grrch_par] = 1.0
+    #grrch_par = par.loc[par.parnme.str.startswith("m_rch_gr"),"parnme"]
+    #par.loc[grrch_par,"partrans"] = "fixed"
+    #pe.loc[:,grrch_par] = 1.0
 
     #crch_par = par.loc[par.parnme.str.startswith("d_const_rch"),:].copy()
     #crch_par.loc[:,"sp"] = crch_par.parnme.apply(lambda x: int(x.split('_')[4]))
@@ -2454,18 +2461,690 @@ def make_prop_histograms(subdir="."):
         pdf.savefig()
         plt.close(fig)
 
+
+def plot_prior_mc_pub(subdir="."):
+    """plot the prior monte carlo results for daily, monthly batch and monthly sequential
+
+    """
+
+
+
+    ognames = keep.copy()
+    ognames = [ognames[0],ognames[-1]]
+    #ognames.extend(forecast)
+    ognames.sort()
+    label_dict = keep_dict
+    label_dict.update(forecast_dict)
+    unit_dict = {n: u for n, u in zip(forecast, forecast_units)}
+    unit_dict.update({n: u for n, u in zip(keep, keep_units)})
+    print(unit_dict)
+
+
+    c_m_d = os.path.join(subdir,"daily_model_files_master_prior")
+    s_b_m_d = os.path.join(subdir,"monthly_model_files_master_prior")
+    s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_prior")
+
+    top = np.loadtxt(os.path.join(s_b_m_d,"freyberg6.dis_top.txt"))
+
+
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    obs = c_pst.observation_data
+    cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"),:]
+    cobs.loc[:,"time"] = cobs.time.apply(float)
+
+    s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    log = c_oe.columns.map(lambda x: "mass" in x)
+    c_oe.loc[:,log] = c_oe.loc[:,log].apply(np.log10)
+    s_b_oe = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+    log = s_b_oe.columns.map(lambda x: "mass" in x)
+    s_b_oe.loc[:, log] = s_b_oe.loc[:, log].apply(np.log10)
+
+    s_s_pst = pyemu.Pst(os.path.join(s_s_m_d,"freyberg.pst"))
+    seq_oe_files = [f for f in os.listdir(s_s_m_d) if f.endswith(".oe.csv") and "global" in f and f.startswith("freyberg")]
+    s_s_oe_dict = {int(f.split(".")[2]):pd.read_csv(os.path.join(s_s_m_d,f),index_col=0) for f in seq_oe_files}
+    for key,df in s_s_oe_dict.items():
+        log = df.columns.map(lambda x: "mass" in x)
+        df.loc[:, log] = df.loc[:, log].apply(np.log10)
+        s_s_oe_dict[key] = df
+
+    pname = "prior_obs_v_sim_pub.pdf"
+    if subdir != ".":
+        pname = os.path.join(subdir,"prior_obs_v_sim_pub_"+subdir+".pdf")
+
+    with PdfPages(pname) as pdf:
+        fig, axes = plt.subplots(len(ognames), 1, figsize=(7, 5))
+        for iax,ogname in enumerate(ognames):
+            ax = axes[iax]
+            cgobs = c_pst.observation_data.loc[c_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(ogname),:].copy()
+            k0ogname = ogname
+            if sgobs.shape[0] == 0:
+                k0ogname = ogname.replace("k:2","k:0")
+                sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname), :].copy()
+            sgobs.loc[:,"time"] = sgobs.time.apply(float)
+            cgobs.loc[:, "time"] = cgobs.time.apply(float)
+
+            sgobs.sort_values(by="time", inplace=True)
+            cgobs.sort_values(by="time",inplace=True)
+
+            seq_name = k0ogname
+            if "arrobs" not in k0ogname:
+                seq_name = k0ogname + "_time:10000.0"
+            print(seq_name)
+            for itime,time in enumerate(sgobs.time):
+                if itime in s_s_oe_dict:
+                    oe = s_s_oe_dict[itime]
+                    #print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".",color="0.5",alpha=0.5)
+
+            [ax.plot(cgobs.time, c_oe.loc[idx, cgobs.obsnme], "r", lw=0.01, alpha=0.5) for idx in c_oe.index]
+
+            [ax.plot(sgobs.time, s_b_oe.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in s_b_oe.index]
+
+
+            # if "arrobs" in ogname:
+            #     i = sgobs.i.apply(int)[0]
+            #     j = sgobs.j.apply(int)[0]
+            #     t = top[i, j]
+            #     ax.plot(ax.get_xlim(),[t,t],"k--",lw=3)
+            ax.set_title("{0}) {1}".format(string.ascii_uppercase[iax], label_dict[ogname]),loc="left")
+            if "arrobs" in ogname:
+                ax.set_ylim(30,ax.get_ylim()[1])
+            ax.set_ylabel(unit_dict[ogname])
+
+            #if "gage" not in ogname:
+            #    ax.set_ylim(30,ax.get_ylim()[1])
+        #for ax in axes[:-1]:
+        #    ax.set_xticklabels([])
+            ax.set_xlabel("time ($days$)")
+        plt.tight_layout()
+        pdf.savefig()
+        plt.close(fig)
+
+def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
+    include_est_states = False
+    ognames = keep.copy()
+    ognames.extend(forecast)
+    label_dict = keep_dict
+    label_dict.update(forecast_dict)
+
+    # first rip thru all the dirs and load...
+    s_b_dict = {}
+    s_s_dict = {}
+    s_s_est_dict = {}
+    print("loading results...")
+
+    for ireal in range(50):
+        s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
+
+        if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+            break
+        try:
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+
+            bpost_iter = s_b_pst.control_data.noptmax
+            if post_iter is not None:
+                bpost_iter = post_iter
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                    index_col=0)
+            log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
+
+
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            spost_iter = s_s_pst.control_data.noptmax
+            if post_iter is not None:
+                spost_iter = post_iter
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
+                                   "freyberg")]
+
+            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
+
+            for key,df in s_s_oe_dict_pr.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+
+
+                df.loc[:,log_cols] = df.loc[:,log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pr[key] = df
+
+            for key, df in s_s_oe_dict_pt.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pt[key] = df
+
+            s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
+            s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
+
+            if include_est_states:
+                # key these one cycle ahead since the posterior est states for this cycle are equiv to the prior sim states
+                # of next cycle
+                s_s_pe_dict_pt = {int(f.split(".")[1]) + 1: pd.read_csv(os.path.join(s_s_m_d, f.replace(".obs.",".par.")),
+                                                                    index_col=0) for f in seq_oe_files_pt}
+                s_s_est_dict[ireal] = s_s_pe_dict_pt
+            print(ireal)
+        except:
+            break
+
+    obs = s_s_pst.observation_data
+    #sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
+    #par = s_s_pst.parameter_data
+    #sfpar = par.loc[pd.notna(par.state_par_link),:]
+    #sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
+
+
+    if len(s_b_dict) == 0:
+        raise Exception()
+
+    ireals = list(s_s_dict.keys())
+    ireals.sort()
+    sbobs_org = s_b_pst.observation_data
+    print("plotting")
+    size,lw=3,0.5
+    pname = os.path.join(subdir,"s_vs_s_pub.pdf")
+    if subdir != ".":
+        pname = pname.replace(".pdf","_"+subdir+".pdf")
+    #if post_iter is not None:
+    #    pname = os.path.join(subdir,"s_vs_s_postiter_{0}.pdf".format(post_iter))
+
+    is_1_lay = True
+    if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+        is_1_lay = False
+
+    with PdfPages(pname) as pdf:
+        figall_keep, axesall_keep = plt.subplots(len(keep), 2, figsize=(6, 8))
+        ax_count = 0
+        for ikeep,ogname in enumerate(keep):
+            #if "mass" not in ogname:
+            #    continue
+            k0ogname = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2","k:0")
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname),:].copy()
+            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"),:]
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            #sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
+            sgobs.sort_values(by="time", inplace=True)
+            axesall_keep[ikeep,0].set_title("{0}) batch {1}".format(string.ascii_uppercase[ax_count],
+                                                                    label_dict[ogname]),loc="left")
+            ax_count += 1
+            axesall_keep[ikeep, 1].set_title(
+                "{0}) sequential {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+            ax_count += 1
+            for itime,oname in enumerate(sgobs.obsnme):
+                if itime < 1 or itime > 12:
+                #if itime != 12:
+                    continue
+
+                for ireal in ireals:
+                    s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
+
+                    s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname,"obsval"].copy()
+                    if "conc" in oname:
+                        if np.abs(cval) > 1.0e+10:
+                            continue
+                    if "mass" in oname or "cnc" in oname:
+                        cval = np.log10(cval)
+                        if ~np.isfinite(cval):
+                            continue
+                    weight = sgobs.loc[oname,"weight"]
+                    print(ireal,oname,cval)
+
+                    if summarize:
+                        mn = s_b_oe_pr.loc[:, oname].mean()
+                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+                        #axes[0, 0].scatter(mn, cval,
+                        #                   marker="o", color="0.5", alpha=0.5,s=size)
+                        #axes[0, 0].plot([lq,uq], [cval,cval],
+                        #                   color="0.5", alpha=0.5,lw=lw)
+
+                        #axesall_keep[ikeep, 0].scatter(mn, cval,
+                        #                   marker="o", color="0.5", alpha=0.5,s=size)
+                        #axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                        #                color="0.5", alpha=0.5, lw=lw)
+
+                        mn = s_b_oe_pt.loc[:, oname].mean()
+                        lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
+                        #axes[1, 0].scatter(mn, cval,
+                        #                   marker="o", color="b", alpha=0.5,s=size)
+                        #axes[1, 0].plot([lq, uq], [cval, cval],
+                        #                color="b", alpha=0.5, lw=lw)
+
+                        axesall_keep[ikeep, 0].scatter(mn, cval,
+                                              marker="o", color="b", alpha=0.5,s=size,zorder=10)
+                        axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                                           color="b", alpha=0.5, lw=lw,zorder=10)
+
+
+                    else:
+                        #axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5,s=size)
+                        #axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
+                        #           alpha=0.5,s=size)
+                        axesall_keep[ikeep,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
+                                   color="0.5", alpha=0.5,s=size)
+                        axesall_keep[ikeep,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
+                                   color="b",alpha=0.5,s=size,zorder=10)
+
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+                        if summarize:
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                            if itime == 3:
+                                if ~np.isfinite(mn):
+                                    print("seq",itime,seq_name,cval,mn,lq,uq)
+                            #axes[0, 1].scatter(mn, cval,
+                            #                   marker="o", color="0.5", alpha=0.5,s=size)
+                            #axes[0, 1].plot([lq, uq], [cval, cval],
+                            #                color="0.5", alpha=0.5, lw=lw)
+
+                            #axesall_keep[ikeep, 1].scatter(mn, cval,
+                            #                      marker="o", color="0.5", alpha=0.5,s=size)
+                            #axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                            #                   color="0.5", alpha=0.5, lw=lw)
+
+                        else:
+                            #axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                            #           alpha=0.5,s=size)
+                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                                       alpha=0.5,s=size)
+
+
+                    if itime in s_s_oe_dict_pt:
+                        oe = s_s_oe_dict_pt[itime]
+                        if summarize:
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                            #axes[1, 1].scatter(mn, cval,
+                            #                   marker="o", color="b", alpha=0.5,s=size)
+                            #axes[1, 1].plot([lq, uq], [cval, cval],
+                            #                color="b", alpha=0.5, lw=lw)
+
+                            axesall_keep[ikeep, 1].scatter(mn, cval,
+                                                  marker="o", color="b", alpha=0.5,s=size)
+                            axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                               color="b", alpha=0.5, lw=lw)
+                        else:
+
+                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size,zorder=10)
+                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
+                                       alpha=0.5,s=size,zorder=10)
+                    # elif itime in s_s_oe_dict_pr:
+                    #     oe = s_s_oe_dict_pr[itime]
+                    #     if summarize:
+                    #         mn = oe.loc[:, seq_name].mean()
+                    #         lq = oe.loc[:, seq_name].quantile(0.05)
+                    #         uq = oe.loc[:, seq_name].quantile(0.95)
+                    #         #axes[1, 1].scatter(mn, cval,
+                    #         #                   marker="o", color="0.5", alpha=0.5,s=size)
+                    #         #axes[1, 1].plot([lq, uq], [cval, cval],
+                    #         #                color="0.5", alpha=0.5, lw=lw)
+                    #
+                    #         axesall_keep[ikeep, 1].scatter(mn, cval,
+                    #                               marker="o", color="0.5", alpha=0.5,s=size)
+                    #         axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                    #                            color="0.5", alpha=0.5, lw=lw)
+                    #     else:
+                    #
+                    #         #axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                    #         #          alpha=0.5,s=size)
+                    #         axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                    #                    alpha=0.5,s=size)
+
+
+            mn = min(axesall_keep[ikeep,0].get_xlim()[0],axesall_keep[ikeep,0].get_ylim()[0],
+                     axesall_keep[ikeep,1].get_xlim()[0],axesall_keep[ikeep,1].get_ylim()[0])
+            mx = max(axesall_keep[ikeep, 0].get_xlim()[1], axesall_keep[ikeep, 0].get_ylim()[1],
+                     axesall_keep[ikeep, 1].get_xlim()[1], axesall_keep[ikeep, 1].get_ylim()[1])
+            axesall_keep[ikeep,0].plot([mn,mx],[mn,mx],"k--")
+            axesall_keep[ikeep, 1].plot([mn, mx], [mn, mx], "k--")
+
+            axesall_keep[ikeep, 0].set_xlim(mn, mx)
+            axesall_keep[ikeep, 0].set_ylim(mn, mx)
+            axesall_keep[ikeep, 1].set_xlim(mn, mx)
+            axesall_keep[ikeep, 1].set_ylim(mn, mx)
+            axesall_keep[ikeep,0].set_aspect("equal")
+            axesall_keep[ikeep,0].set_ylabel("complex")
+            axesall_keep[ikeep,0].set_xlabel("simple")
+            axesall_keep[ikeep, 1].set_aspect("equal")
+            axesall_keep[ikeep, 1].set_ylabel("complex")
+            axesall_keep[ikeep, 1].set_xlabel("simple")
+
+
+        plt.tight_layout()
+        pdf.savefig(figall_keep)
+        plt.close(figall_keep)
+
+        figall_keep, axesall_keep = plt.subplots(len(forecast), 2, figsize=(5, 8))
+        ax_count = 0
+        for ikeep, ogname in enumerate(forecast):
+            # if "mass" not in ogname:
+            #    continue
+            k0ogname = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2", "k:0")
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname), :].copy()
+            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"), :]
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
+            sgobs.sort_values(by="time", inplace=True)
+            axesall_keep[ikeep, 0].set_title(
+                "{0}) batch {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+            ax_count += 1
+            axesall_keep[ikeep, 1].set_title(
+                "{0}) sequential {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+            ax_count += 1
+            for itime, oname in enumerate(sgobs.obsnme):
+                if itime < 12 or itime > 16:
+                    continue
+
+                for ireal in ireals:
+                    s_b_pst, s_b_oe_pr, s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
+
+                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname, "obsval"].copy()
+                    if "conc" in oname:
+                        if np.abs(cval) > 1.0e+10:
+                            continue
+                    if "mass" in oname or "cnc" in oname:
+                        cval = np.log10(cval)
+                        if ~np.isfinite(cval):
+                            continue
+                    weight = sgobs.loc[oname, "weight"]
+                    print(ireal, oname, cval)
+
+                    if summarize:
+                        mn = s_b_oe_pr.loc[:, oname].mean()
+                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+                        # axes[0, 0].scatter(mn, cval,
+                        #                   marker="o", color="0.5", alpha=0.5,s=size)
+                        # axes[0, 0].plot([lq,uq], [cval,cval],
+                        #                   color="0.5", alpha=0.5,lw=lw)
+
+                        # axesall_keep[ikeep, 0].scatter(mn, cval,
+                        #                   marker="o", color="0.5", alpha=0.5,s=size)
+                        # axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                        #                color="0.5", alpha=0.5, lw=lw)
+
+                        mn = s_b_oe_pt.loc[:, oname].mean()
+                        lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
+                        # axes[1, 0].scatter(mn, cval,
+                        #                   marker="o", color="b", alpha=0.5,s=size)
+                        # axes[1, 0].plot([lq, uq], [cval, cval],
+                        #                color="b", alpha=0.5, lw=lw)
+
+                        axesall_keep[ikeep, 0].scatter(mn, cval,
+                                                       marker="o", color="b", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                                                    color="b", alpha=0.5, lw=lw, zorder=10)
+
+
+                    else:
+                        # axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5,s=size)
+                        # axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
+                        #           alpha=0.5,s=size)
+                        axesall_keep[ikeep, 0].scatter(s_b_oe_pr.loc[:, oname],
+                                                       [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
+                                                       color="0.5", alpha=0.5, s=size)
+                        axesall_keep[ikeep, 0].scatter(s_b_oe_pt.loc[:, oname],
+                                                       [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
+                                                       color="b", alpha=0.5, s=size, zorder=10)
+
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+                        if summarize:
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                            if itime == 3:
+                                if ~np.isfinite(mn):
+                                    print("seq", itime, seq_name, cval, mn, lq, uq)
+
+                            axesall_keep[ikeep, 1].scatter(mn, cval,
+                                                  marker="o", color="0.5", alpha=0.5,s=size)
+                            axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                               color="0.5", alpha=0.5, lw=lw)
+
+                        else:
+                            # axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                            #           alpha=0.5,s=size)
+                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                                                           marker="o", color="0.5",
+                                                           alpha=0.5, s=size)
+
+                    if itime in s_s_oe_dict_pt:
+                        oe = s_s_oe_dict_pt[itime]
+                        if summarize:
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                            # axes[1, 1].scatter(mn, cval,
+                            #                   marker="o", color="b", alpha=0.5,s=size)
+                            # axes[1, 1].plot([lq, uq], [cval, cval],
+                            #                color="b", alpha=0.5, lw=lw)
+
+                            #axesall_keep[ikeep, 1].scatter(mn, cval,
+                            #                               marker="o", color="b", alpha=0.5, s=size)
+                            #axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                            #                            color="b", alpha=0.5, lw=lw)
+                        else:
+
+                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                                                        marker="o", color="b",
+                                                        alpha=0.5, s=size, zorder=10)
+                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                                                           marker="o", color="b",
+                                                           alpha=0.5, s=size, zorder=10)
+                    # elif itime in s_s_oe_dict_pr:
+                    #     oe = s_s_oe_dict_pr[itime]
+                    #     if summarize:
+                    #         mn = oe.loc[:, seq_name].mean()
+                    #         lq = oe.loc[:, seq_name].quantile(0.05)
+                    #         uq = oe.loc[:, seq_name].quantile(0.95)
+                    #         # axes[1, 1].scatter(mn, cval,
+                    #         #                   marker="o", color="0.5", alpha=0.5,s=size)
+                    #         # axes[1, 1].plot([lq, uq], [cval, cval],
+                    #         #                color="0.5", alpha=0.5, lw=lw)
+                    #
+                    #         axesall_keep[ikeep, 1].scatter(mn, cval,
+                    #                                        marker="o", color="0.5", alpha=0.5, s=size)
+                    #         axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                    #                                     color="0.5", alpha=0.5, lw=lw)
+                    #     else:
+                    #
+                    #         # axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                    #         #          alpha=0.5,s=size)
+                    #         axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                    #                                        marker="o", color="0.5",
+                    #                                        alpha=0.5, s=size)
+
+            mn = min(axesall_keep[ikeep, 0].get_xlim()[0], axesall_keep[ikeep, 0].get_ylim()[0],
+                     axesall_keep[ikeep, 1].get_xlim()[0], axesall_keep[ikeep, 1].get_ylim()[0])
+            mx = max(axesall_keep[ikeep, 0].get_xlim()[1], axesall_keep[ikeep, 0].get_ylim()[1],
+                     axesall_keep[ikeep, 1].get_xlim()[1], axesall_keep[ikeep, 1].get_ylim()[1])
+            axesall_keep[ikeep, 0].plot([mn, mx], [mn, mx], "k--")
+            axesall_keep[ikeep, 1].plot([mn, mx], [mn, mx], "k--")
+            #print(ogname,mn,mx)
+            axesall_keep[ikeep, 0].set_xlim(mn, mx)
+            axesall_keep[ikeep, 0].set_ylim(mn, mx)
+            axesall_keep[ikeep, 1].set_xlim(mn, mx)
+            axesall_keep[ikeep, 1].set_ylim(mn, mx)
+            axesall_keep[ikeep, 0].set_aspect("equal")
+            axesall_keep[ikeep, 0].set_ylabel("complex")
+            axesall_keep[ikeep, 0].set_xlabel("simple")
+            axesall_keep[ikeep, 1].set_aspect("equal")
+            axesall_keep[ikeep, 1].set_ylabel("complex")
+            axesall_keep[ikeep, 1].set_xlabel("simple")
+
+        plt.tight_layout()
+        pdf.savefig(figall_keep)
+        plt.close(figall_keep)
+
+        cycles = np.arange(12,16,dtype=int)
+        norm = mpl.colors.Normalize(vmin=0,vmax=len(cycles))
+        cmap = plt.get_cmap("jet")
+        figall_keep, axesall_keep = plt.subplots(1, 2, figsize=(8, 4))
+        ax_count = 0
+        for ikeep, ogname in enumerate(forecast[1:]):
+            # if "mass" not in ogname:
+            #    continue
+            k0ogname = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2", "k:0")
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname), :].copy()
+            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"), :]
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
+            sgobs.sort_values(by="time", inplace=True)
+            axesall_keep[ikeep].set_title(
+                "{0}) {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname].replace("\n"," ")),loc="left")
+            ax_count += 1
+            axesall_keep[ikeep].set_title(
+                "{0}) {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname].replace("\n"," ")),loc="left")
+            ax_count += 1
+            iitime = 0
+            for itime, oname in enumerate(sgobs.obsnme):
+                if itime not in cycles:
+                    continue
+                color = cmap(norm(iitime))
+                iitime += 1
+                print(itime,oname)
+                for ireal in ireals:
+                    s_b_pst, s_b_oe_pr, s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
+
+                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname, "obsval"].copy()
+                    if "conc" in oname:
+                        if np.abs(cval) > 1.0e+10:
+                            continue
+                    if "mass" in oname or "cnc" in oname:
+                        cval = np.log10(cval)
+                        if ~np.isfinite(cval):
+                            continue
+
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+                        print(itime,ogname,color)
+                        if summarize:
+                            mn = oe.loc[:, seq_name].dropna().mean()
+                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+
+                            axesall_keep[ikeep].scatter(mn, cval,
+                                                  marker="o", color=color, alpha=0.5,s=size)
+                            axesall_keep[ikeep].plot([lq, uq], [cval, cval],
+                                               color=color, alpha=0.5, lw=lw)
+
+                        #else:
+                            # axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
+                            #           alpha=0.5,s=size)
+                            #axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                            #                               marker="o", color=color,
+                            #                               alpha=0.5, s=size)
+
+                    # if int(itime) in s_s_oe_dict_pt:
+                    #     oe = s_s_oe_dict_pt[itime]
+                    #     print(ogname,itime, color)
+                    #     if summarize:
+                    #         mn = oe.loc[:, seq_name].dropna().mean()
+                    #         lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                    #         uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                    #         # axes[1, 1].scatter(mn, cval,
+                    #         #                   marker="o", color="b", alpha=0.5,s=size)
+                    #         # axes[1, 1].plot([lq, uq], [cval, cval],
+                    #         #                color="b", alpha=0.5, lw=lw)
+                    #
+                    #         axesall_keep[ikeep].scatter(mn, cval,
+                    #                                       marker="o", color=color, alpha=0.5, s=size)
+                    #         axesall_keep[ikeep].plot([lq, uq], [cval, cval],
+                    #                                    color=color, alpha=0.5, lw=lw)
+                    #     else:
+                    #
+                    #         axesall_keep[ikeep].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                    #                                     marker="o", color=color,
+                    #                                     alpha=0.5, s=size, zorder=10)
+                    #         axesall_keep[ikeep].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
+                    #                                        marker="o", color=color,
+                    #                                        alpha=0.5, s=size, zorder=10)
+
+
+
+            ax = axesall_keep[ikeep]
+            mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
+            mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
+            ax.plot([mn, mx], [mn, mx], "k--")
+
+            ax.set_xlim(mn, mx)
+            ax.set_ylim(mn, mx)
+
+            axesall_keep[ikeep].set_aspect("equal")
+            axesall_keep[ikeep].set_ylabel("complex")
+            axesall_keep[ikeep].set_xlabel("simple")
+            #axesall_keep[ikeep, 1].set_aspect("equal")
+            #axesall_keep[ikeep, 1].set_ylabel("complex")
+            #axesall_keep[ikeep, 1].set_xlabel("simple")
+
+        plt.tight_layout()
+        pdf.savefig(figall_keep)
+        plt.close(figall_keep)
+
+
 if __name__ == "__main__":
 
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    reduce_simple_forcing_pars(b_d)
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
-    #m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
-    #m_c_d = run_complex_prior_mc(c_d,num_workers=12)
- 
-    plot_prior_mc()
+
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+    # #reduce_simple_pars(b_d)
+    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
+    # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
+    #plot_prior_mc_all()
+    plot_prior_mc_pub()
+    plot_prior_mc_pub(subdir="missing_wel_pars")
+
+
     #b_d = "monthly_model_files_template"
     # b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     # s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
@@ -2473,15 +3152,17 @@ if __name__ == "__main__":
 
     #exit()
     #
-    #compare_mf6_freyberg(num_workers=25, num_replicates=100,num_reals=50,use_sim_states=True,
-    #                   run_ies=True,run_da=True,adj_init_states=True)
+    #compare_mf6_freyberg(num_workers=25, num_replicates=50,num_reals=50,use_sim_states=True,
+    #                  run_ies=True,run_da=True,adj_init_states=True)
     # compare_mf6_freyberg(num_workers=12, num_replicates=50,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
-    #exit()
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s(summarize=True)
+    #plot_s_vs_s_pub(summarize=True)
+    #plot_s_vs_s_pub(summarize=True,subdir="missing_wel_pars")
+    #plot_s_vs_s_pub(summarize=True)
+
     #plot_s_vs_s(summarize=True,post_iter=1)
 
     #invest()
