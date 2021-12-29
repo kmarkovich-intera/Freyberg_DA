@@ -84,7 +84,7 @@ def clean_master_dirs():
 
 
 def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
-                         run_ies=True,run_da=True,adj_init_states=True):
+                         run_ies=True,run_da=True,adj_init_states=True,seq_noptmax=1):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
@@ -152,7 +152,7 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
                 par = da_pst.parameter_data
                 istate_pars = par.loc[par.parnme.str.startswith("direct_head"),"parnme"]
                 par.loc[istate_pars,"partrans"] = "fixed"
-            da_pst.control_data.noptmax = 3
+            da_pst.control_data.noptmax = seq_noptmax
             da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
 
             m_da_dir = da_t_d.replace("template", "master")
@@ -1767,6 +1767,14 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             break
         try:
             s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names, :]
+            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+            if obs.obsval.max() > 8000:
+                continue
+            obs = s_b_pst.observation_data
+            obs = obs.loc[obs.obsnme.str.contains("hds_usecol:arrobs_head_k:0_i:33_j:7"),:]
+            if obs.obsval.min() < 30:
+                continue
             s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
             log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
             s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
@@ -1858,6 +1866,8 @@ def plot_s_vs_s(summarize=False, subdir=".", post_iter=None):
             sgobs.sort_values(by="time", inplace=True)
             figall,axesall = plt.subplots(2, 2, figsize=(8, 8))
             for itime,oname in enumerate(sgobs.obsnme):
+                if itime == 0:
+                    continue
                 #if itime != 3:
                 #    continue
                 fig, axes = plt.subplots(2, 2, figsize=(8, 6))
@@ -2583,6 +2593,11 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             break
         try:
             s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names,:]
+            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+            if obs.obsval.max() > 8000:
+                continue
+
             s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
             log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
             s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
@@ -3129,20 +3144,285 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
         plt.close(figall_keep)
 
 
+
+
+
+
+
+
+
+
+def plot_s_vs_s_pub_2(summarize=False, subdir=".", post_iter=None):
+    include_est_states = False
+    ognames = keep.copy()
+    ognames.extend(forecast)
+    label_dict = keep_dict
+    label_dict.update(forecast_dict)
+
+    # first rip thru all the dirs and load...
+    s_b_dict = {}
+    s_s_dict = {}
+    s_s_est_dict = {}
+    print("loading results...")
+
+    for ireal in range(50):
+        s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
+
+        if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+            break
+        try:
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names,:]
+            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+            if obs.obsval.max() > 8000:
+                continue
+            obs = s_b_pst.observation_data
+            obs = obs.loc[obs.obsnme.str.contains("hds_usecol:arrobs_head_k:0_i:33_j:7"), :]
+            if obs.obsval.min() < 30:
+                continue
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+
+            bpost_iter = s_b_pst.control_data.noptmax
+            if post_iter is not None:
+                bpost_iter = post_iter
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                    index_col=0)
+            log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+            s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
+
+
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            spost_iter = s_s_pst.control_data.noptmax
+            if post_iter is not None:
+                spost_iter = post_iter
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
+                                   "freyberg")]
+
+            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
+
+            for key,df in s_s_oe_dict_pr.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+
+
+                df.loc[:,log_cols] = df.loc[:,log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pr[key] = df
+
+            for key, df in s_s_oe_dict_pt.items():
+                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                df = df.replace(-np.Inf, np.nan)
+                s_s_oe_dict_pt[key] = df
+
+            s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
+            s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
+
+            if include_est_states:
+                # key these one cycle ahead since the posterior est states for this cycle are equiv to the prior sim states
+                # of next cycle
+                s_s_pe_dict_pt = {int(f.split(".")[1]) + 1: pd.read_csv(os.path.join(s_s_m_d, f.replace(".obs.",".par.")),
+                                                                    index_col=0) for f in seq_oe_files_pt}
+                s_s_est_dict[ireal] = s_s_pe_dict_pt
+            print(ireal)
+        except:
+            break
+
+    obs = s_s_pst.observation_data
+    #sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
+    #par = s_s_pst.parameter_data
+    #sfpar = par.loc[pd.notna(par.state_par_link),:]
+    #sipar_to_sfpar = {si:sf for si,sf in zip(sfpar.state_par_link,sfpar.parnme)}
+
+
+    if len(s_b_dict) == 0:
+        raise Exception()
+
+    ireals = list(s_s_dict.keys())
+    ireals.sort()
+    sbobs_org = s_b_pst.observation_data
+    print("plotting")
+    size,lw=3,0.5
+    pname = os.path.join(subdir,"s_vs_s_pub.pdf")
+    if subdir != ".":
+        pname = pname.replace(".pdf","_"+subdir+".pdf")
+    #if post_iter is not None:
+    #    pname = os.path.join(subdir,"s_vs_s_postiter_{0}.pdf".format(post_iter))
+
+    is_1_lay = True
+    if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+        is_1_lay = False
+    labels = ["SW flux ($\\frac{m^3}{day}$)","GW level ($m$)","GW level ($m$)","SW-GW flux ($\\frac{m^3}{d}$)"]
+    sites = [keep[-1],keep[0],forecast[2],forecast[1]]
+    names = ["surace-water flux","groundwater level gw-1","groundwater level gw-3","headwater flux"]
+    with PdfPages(pname) as pdf:
+        for ikeep, ogname in enumerate(sites):
+            # if "mass" not in ogname:
+            #    continue
+
+            lab = labels[ikeep]
+            k0ogname = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2", "k:0")
+            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname), :].copy()
+            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"), :]
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
+            sgobs.sort_values(by="time", inplace=True)
+            fig,axes = plt.subplots(2,2,figsize=(6,6))
+
+            for itime, oname in enumerate(sgobs.obsnme):
+                if itime != 12:
+                    continue
+                print(itime, oname)
+                for ireal in ireals:
+                    s_b_pst, s_b_oe_pr, s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
+
+                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname, "obsval"].copy()
+
+                    mn = s_b_oe_pr.loc[:, oname].mean()
+                    lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                    uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+                    #axes[0, 0].scatter(mn, cval,
+                    #                   marker="o", color="0.5", alpha=0.5,s=size)
+                    #axes[0, 0].plot([lq,uq], [cval,cval],
+                    #                   color="0.5", alpha=0.5,lw=lw)
+
+                    mn = s_b_oe_pt.loc[:, oname].mean()
+                    lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
+                    uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
+                    axes[0, 0].scatter(mn, cval,
+                                       marker="o", color="b", alpha=0.5, s=size)
+                    axes[0, 0].plot([lq, uq], [cval, cval],
+                                    color="b", alpha=0.5, lw=lw)
+
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+
+                        mn = oe.loc[:, seq_name].dropna().mean()
+                        lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                        uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                        axes[0, 1].scatter(mn, cval,
+                                           marker="o", color="0.5", alpha=0.5, s=size)
+                        axes[0, 1].plot([lq, uq], [cval, cval],
+                                        color="0.5", alpha=0.5, lw=lw)
+
+                        oe = s_s_oe_dict_pt[itime]
+
+                        mn = oe.loc[:, seq_name].dropna().mean()
+                        lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                        uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                        axes[0, 1].scatter(mn, cval,
+                                           marker="o", color="b", alpha=0.5, s=size)
+                        axes[0, 1].plot([lq, uq], [cval, cval],
+                                        color="b", alpha=0.35, lw=lw)
+            for itime, oname in enumerate(sgobs.obsnme):
+                if itime != 24:
+                    continue
+                print(itime, oname)
+                for ireal in ireals:
+                    s_b_pst, s_b_oe_pr, s_b_oe_pt = s_b_dict[ireal]
+                    sbobs = s_b_pst.observation_data
+                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
+
+                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
+
+                    cval = sgobs.loc[oname, "obsval"].copy()
+
+                    mn = s_b_oe_pr.loc[:, oname].mean()
+                    lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                    uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+                    #axes[1, 0].scatter(mn, cval,
+                    #                   marker="o", color="0.5", alpha=0.5,s=size)
+                    #axes[1, 0].plot([lq,uq], [cval,cval],
+                    #                   color="0.5", alpha=0.5,lw=lw)
+
+                    mn = s_b_oe_pt.loc[:, oname].mean()
+                    lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
+                    uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
+                    axes[1, 0].scatter(mn, cval,
+                                     marker="o", color="b", alpha=0.5, s=size)
+                    axes[1, 0].plot([lq, uq], [cval, cval],
+                                    color="b", alpha=0.5, lw=lw)
+
+                    seq_name = k0ogname
+                    if "arrobs" not in k0ogname:
+                        seq_name = k0ogname + "_time:10000.0"
+
+                    if itime in s_s_oe_dict_pr:
+                        oe = s_s_oe_dict_pr[itime]
+
+                        mn = oe.loc[:, seq_name].dropna().mean()
+                        lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                        uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                        axes[1, 1].scatter(mn, cval,
+                                           marker="o", color="0.5", alpha=0.5, s=size)
+                        axes[1, 1].plot([lq, uq], [cval, cval],
+                                        color="0.5", alpha=0.5, lw=lw)
+
+                        #oe = s_s_oe_dict_pt[itime]
+
+                        # mn = oe.loc[:, seq_name].dropna().mean()
+                        # lq = oe.loc[:, seq_name].dropna().quantile(0.05)
+                        # uq = oe.loc[:, seq_name].dropna().quantile(0.95)
+                        # axes[1, 1].scatter(mn, cval,
+                        #                    marker="o", color="b", alpha=0.5, s=size)
+                        # axes[1, 1].plot([lq, uq], [cval, cval],
+                        #                 color="b", alpha=0.5, lw=lw)
+
+
+
+            mn = 1.0e+10
+            mx = -12.0e+10
+            for ax in axes.flatten():
+                mn = min(mn,ax.get_xlim()[0], ax.get_ylim()[0])
+                mx = max(mx,ax.get_xlim()[1], ax.get_ylim()[1])
+
+            for ax in axes.flatten():
+                ax.plot([mn, mx], [mn, mx], "k--")
+                ax.set_xlim(mn,mx)
+                ax.set_ylim(mn,mx)
+                ax.set_xlabel("simple {0}".format(lab))
+                ax.set_ylabel("complex {0}".format(lab))
+            axes[0,0].set_title("A) batch cycle 13",loc="left")
+            axes[0, 1].set_title("B) sequential cycle 13",loc="left")
+            axes[1, 0].set_title("C) batch cycle 25",loc="left")
+            axes[1, 1].set_title("D) sequential cycle 25",loc="left")
+            fig.suptitle(names[ikeep])
+            plt.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+
 if __name__ == "__main__":
 
 
     # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
     # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+   # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     # #reduce_simple_pars(b_d)
-    # s_d = monthly_ies_to_da(b_d,include_est_states=False)
+    #s_d = monthly_ies_to_da(b_d,include_est_states=False)
     # m_b_d, m_s_d = run_batch_seq_prior_monte_carlo(b_d, s_d)
     # m_c_d = run_complex_prior_mc(c_d,num_workers=12)
     #plot_prior_mc_all()
-    plot_prior_mc_pub()
-    plot_prior_mc_pub(subdir="missing_wel_pars")
+    #plot_prior_mc_pub()
+    #plot_prior_mc_pub(subdir="missing_wel_pars")
 
 
     #b_d = "monthly_model_files_template"
@@ -3153,17 +3433,17 @@ if __name__ == "__main__":
     #exit()
     #
     #compare_mf6_freyberg(num_workers=25, num_replicates=50,num_reals=50,use_sim_states=True,
-    #                  run_ies=True,run_da=True,adj_init_states=True)
+    #                  run_ies=False,run_da=True,adj_init_states=True,seq_noptmax=1)
     # compare_mf6_freyberg(num_workers=12, num_replicates=50,num_reals=50,use_sim_states=True,
     #                   run_ies=True,run_da=True,adj_init_states=True)
     #plot_obs_v_sim2()
     #plot_obs_v_sim2(post_iter=1)
     #plot_domain()
-    #plot_s_vs_s_pub(summarize=True)
-    #plot_s_vs_s_pub(summarize=True,subdir="missing_wel_pars")
+    plot_s_vs_s_pub_2(summarize=True)
+    plot_s_vs_s_pub_2(summarize=True,subdir="missing_wel_pars")
     #plot_s_vs_s_pub(summarize=True)
 
-    #plot_s_vs_s(summarize=True,post_iter=1)
+    #plot_s_vs_s(summarize=True)#,subdir="missing_wel_pars")
 
     #invest()
     #clean_results("naive_50reals_eststates")
