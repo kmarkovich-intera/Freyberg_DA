@@ -3259,9 +3259,10 @@ def plot_s_vs_s_pub_2(summarize=False, subdir=".", post_iter=None):
     is_1_lay = True
     if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
         is_1_lay = False
-    labels = ["SW flux ($\\frac{m^3}{day}$)","GW level ($m$)","GW level ($m$)","SW-GW flux ($\\frac{m^3}{d}$)"]
+    labels = ["surface-water flux ($\\frac{m^3}{d}$)","groundwater level ($m$)","groundwater level ($m$)","SW-GW flux ($\\frac{m^3}{d}$)"]
     sites = [keep[-1],keep[0],forecast[2],forecast[1]]
-    names = ["surace-water flux","groundwater level gw-1","groundwater level gw-3","headwater flux"]
+    names = ["sw_1","gw_1",
+             "gw forecast","headwater forecast\n   "]
     with PdfPages(pname) as pdf:
         for ikeep, ogname in enumerate(sites):
             # if "mass" not in ogname:
@@ -3399,11 +3400,11 @@ def plot_s_vs_s_pub_2(summarize=False, subdir=".", post_iter=None):
                 ax.set_ylim(mn,mx)
                 ax.set_xlabel("simple {0}".format(lab))
                 ax.set_ylabel("complex {0}".format(lab))
-            axes[0,0].set_title("A) batch cycle 13",loc="left")
-            axes[0, 1].set_title("B) sequential cycle 13",loc="left")
-            axes[1, 0].set_title("C) batch cycle 25",loc="left")
-            axes[1, 1].set_title("D) sequential cycle 25",loc="left")
-            fig.suptitle(names[ikeep])
+            axes[0,0].set_title("A) {0} batch cycle 13".format(names[ikeep]),loc="left")
+            axes[0, 1].set_title("B) {0} sequential cycle 13".format(names[ikeep]),loc="left")
+            axes[1, 0].set_title("C) {0} batch cycle 25".format(names[ikeep]),loc="left")
+            axes[1, 1].set_title("D) {0} sequential cycle 25".format(names[ikeep]),loc="left")
+            #fig.suptitle(names[ikeep])
             plt.tight_layout()
             pdf.savefig(fig)
             plt.close(fig)
