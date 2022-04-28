@@ -37,14 +37,14 @@ ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
 keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
 keep_labels = ["gw_1","gw_2","gw_3","sw_1"]
-keep_units = ["$ft$","$ft$","$ft$","$\\frac{ft^3}{d}$"]
+keep_units = ["$m$","$m$","$m$","$\\frac{m^3}{d}$"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
 keep_dict2 = {k:l for k,l in zip(keep,keep_units)}
 
 # forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
 # forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
 # forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
-# forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
+# forecast_units = ["$\\frac{m^3}{d}$","$\\frac{m^3}{d}$","$m$"]
 
 # forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1",
 #             "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
@@ -53,7 +53,7 @@ keep_dict2 = {k:l for k,l in zip(keep,keep_units)}
 forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
-forecast_units = ["$\\frac{ft^3}{d}$","$\\frac{ft^3}{d}$","$ft$"]
+forecast_units = ["$\\frac{m^3}{d}$","$\\frac{m^3}{d}$","$m$"]
 forecast_dict2 = {k:l for k,l in zip(forecast,forecast_units)}
 
 keep_sngl_lyr = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:0_i:2_j:9', 'arrobs_head_k:0_i:33_j:7', 'sfr_usecol:gage_1']
@@ -1739,9 +1739,9 @@ def plot_domain():
     top[top<0] = np.NaN
     cb = ax.imshow(top,extent=m.modelgrid.extent,cmap="bone")
     cb = plt.colorbar(cb,pad=0.01)
-    cb.set_label("top $ft$")
-    ax.set_xlabel("x $ft$")
-    ax.set_ylabel("y $ft$")
+    cb.set_label("top $m$")
+    ax.set_xlabel("x $m$")
+    ax.set_ylabel("y $m$")
 
     ax.set_ylim(0,ylim[1])
     plt.tight_layout()
@@ -3430,7 +3430,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
 
     m = 1
     pp = PdfPages(pname)
-    for ireal in range(50):
+    for ireal in range(10):
         s_b_m_d = os.path.join('.', "monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join('.', "seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
@@ -3561,7 +3561,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
             plt.savefig(pp, format='pdf')
             pp.savefig()
             m+=1
-    pp.close()
+    # pp.close()
 
     c_m_d = "daily_model_files_master_prior"
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
@@ -3575,8 +3575,8 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
     if post_iter is not None:
         pname = os.path.join(subdir, "obs_v_sim_postier_{0}.pdf".format(post_iter))
 
-    pp = PdfPages("HESS_2022-170_supporting_information2.pdf")
-    for ireal in range(50):
+    # pp = PdfPages("HESS_2022-170_supporting_information2.pdf")
+    for ireal in range(10):
         s_b_m_d = os.path.join(subdir, "monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join(subdir, "seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
@@ -3710,7 +3710,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
 if __name__ == "__main__":
 
 
-    #### MAIN WORKFLOW ####
+    # #### MAIN WORKFLOW ####
     #coarse scenario
     sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
