@@ -3430,7 +3430,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
 
     m = 1
     pp = PdfPages(pname)
-    for ireal in range(10):
+    for ireal in range(20):
         s_b_m_d = os.path.join('.', "monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join('.', "seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
@@ -3559,9 +3559,8 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
                 ax.set_ylim(mn, mx)
             plt.tight_layout()
             plt.savefig(pp, format='pdf')
-            pp.savefig()
+            # pp.savefig()
             m+=1
-    # pp.close()
 
     c_m_d = "daily_model_files_master_prior"
     c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
@@ -3576,7 +3575,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
         pname = os.path.join(subdir, "obs_v_sim_postier_{0}.pdf".format(post_iter))
 
     # pp = PdfPages("HESS_2022-170_supporting_information2.pdf")
-    for ireal in range(10):
+    for ireal in range(20):
         s_b_m_d = os.path.join(subdir, "monthly_model_files_master_{0}".format(ireal))
         s_s_m_d = os.path.join(subdir, "seq_monthly_model_files_master_{0}".format(ireal))
         if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
@@ -3703,14 +3702,312 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
                 ax.set_ylim(mn, mx)
             plt.tight_layout()
             plt.savefig(pp, format='pdf')
-            pp.savefig()
+            # pp.savefig()
             m+=1
 
     pp.close()
+
+def plot_obs_v_sim_pub(subdir=".",post_iter=None):
+    """plot the results for daily, monthly batch and monthly sequential
+
+     """
+    c_m_d = "daily_model_files_master_prior"
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    cobs = c_pst.observation_data
+    # cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
+    cobs.loc[:, "time"] = cobs.time.apply(float)
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    cw_cols = c_oe.columns.map(lambda x: "mass" in x)
+    c_oe.loc[:, cw_cols] = c_oe.loc[:, cw_cols].apply(np.log10)
+    pname = os.path.join('.', "obs_v_sim_pub.pdf")
+    if post_iter is not None:
+        pname = os.path.join('.', "obs_v_sim_postier_{0}.pdf".format(post_iter))
+
+    m = 1
+    pp = PdfPages(pname)
+    for ireal in range(12,13):
+        s_b_m_d = os.path.join('.', "monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join('.', "seq_monthly_model_files_master_{0}".format(ireal))
+        if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
+            break
+        try:
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            sw_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x)
+            s_b_oe_pr.loc[:, sw_cols] = s_b_oe_pr.loc[:, sw_cols].apply(np.log10)
+            bpost_iter = s_b_pst.control_data.noptmax
+            if post_iter is not None:
+                bpost_iter = post_iter
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                    index_col=0)
+            s_b_oe_pt.loc[:, sw_cols] = s_b_oe_pt.loc[:, sw_cols].apply(np.log10)
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            spost_iter = s_s_pst.control_data.noptmax
+            if post_iter is not None:
+                spost_iter = post_iter
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith("freyberg")]
+
+            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
+            for key, df in s_s_oe_dict_pr.items():
+                log_cols = df.columns.map(lambda x: "mass" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                s_s_oe_dict_pr[key] = df
+            for key, df in s_s_oe_dict_pt.items():
+                log_cols = df.columns.map(lambda x: "mass" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                s_s_oe_dict_pt[key] = df
+
+        except:
+            break
+
+        ognames = keep.copy()
+        ognames.extend(forecast)
+        label_dict = keep_dict.copy()
+        label_dict.update(forecast_dict)
+        units_dict = keep_dict2.copy()
+        units_dict.update(forecast_dict2)
+
+        is_1_lay = True
+        if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+            is_1_lay = False
+
+        for ogname in ognames:
+            print('plotting', ogname)
+            # if "cum" not in ogname:
+            #    continue
+            k0name = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2", "k:0")
+            fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+            cgobs = cobs.loc[cobs.obsnme.str.contains(ogname), :].copy()
+            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname), :].copy()
+            if cgobs.shape[0] == 0:
+                raise Exception("complex empty " + ogname)
+            if sgobs.shape[0] == 0:
+                raise Exception("batch empty " + k0ogname + "," + ogname)
+
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            cgobs.loc[:, "time"] = cgobs.time.apply(float)
+            sgnzobs = sgobs.loc[sgobs.weight > 0, :].copy()
+
+            sgobs.sort_values(by="time", inplace=True)
+            cgobs.sort_values(by="time", inplace=True)
+
+            ax = axes[0]
+            ax.set_title("A) batch formulation {0}, replicate {1}, coarse scenario".format(label_dict[ogname], c_oe.index[ireal]),
+                         loc="left")
+            ax.set_xlabel("Simulation Time (days)")
+            ax.set_ylabel("{0}".format(units_dict[ogname]))
+            obs = mpatches.Patch(color='red', label='Replicate Simulated Quantity')
+            pr = mpatches.Patch(color='grey', label='Prior Realization Simulated Quantity')
+            pt = mpatches.Patch(color='blue', label='Posterior Realization Simulated Quantity')
+            plt.legend(handles=[obs, pr, pt])
+            [ax.plot(sgobs.time, s_b_oe_pr.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in
+             s_b_oe_pr.index]
+            [ax.plot(sgobs.time, s_b_oe_pt.loc[idx, sgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in
+             s_b_oe_pt.index]
+            ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+            ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+            ax = axes[1]
+
+            seq_name = k0ogname
+            if "arrobs" not in k0ogname:
+                seq_name = k0ogname + "_time:10000.0"
+            print(ireal, seq_name)
+            for itime, time in enumerate(sgobs.time):
+                # itime += 1
+
+                if itime in s_s_oe_dict_pr:
+                    oe = s_s_oe_dict_pr[itime]
+                    # print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="0.5",
+                               alpha=0.5)
+                if itime in s_s_oe_dict_pt:
+                    oe = s_s_oe_dict_pt[itime]
+                    # print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="b",
+                               alpha=0.5)
+            ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+            ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+            ax.set_title(
+                "B) sequential formulation {0}, replicate {1}, coarse scenario".format(label_dict[ogname], c_oe.index[ireal]),
+                loc="left")
+            ax.set_xlabel("Simulation Time (days)")
+            ax.set_ylabel("{0}".format(units_dict[ogname]))
+            obs = mpatches.Patch(color='red', label='Replicate Simulated Quantity')
+            pr = mpatches.Patch(color='grey', label='Prior Realization Simulated Quantity')
+            pt = mpatches.Patch(color='blue', label='Posterior Realization Simulated Quantity')
+            plt.legend(handles=[obs, pr, pt])
+            # if "gage" not in ogname:
+            #    ax.set_ylim(30,ax.get_ylim()[1])
+            mn = 1.0e+10
+            mx = -1.0e+10
+            for ax in axes.flatten():
+                mn = min(ax.get_ylim()[0], mn)
+                mx = max(ax.get_ylim()[1], mx)
+            for ax in axes.flatten():
+                ax.set_ylim(mn, mx)
+            plt.tight_layout()
+            plt.savefig(pp, format='pdf')
+            # pp.savefig()
+        m+=1
+    # pp.close()
+
+    c_m_d = "daily_model_files_master_prior"
+    c_pst = pyemu.Pst(os.path.join(c_m_d, "freyberg.pst"))
+    cobs = c_pst.observation_data
+    # cobs = obs.loc[obs.obsnme.str.startswith("hds_usecol:arrobs_head_"), :]
+    cobs.loc[:, "time"] = cobs.time.apply(float)
+    c_oe = pd.read_csv(os.path.join(c_m_d, "freyberg.0.obs.csv"), index_col=0)
+    cw_cols = c_oe.columns.map(lambda x: "mass" in x)
+    c_oe.loc[:, cw_cols] = c_oe.loc[:, cw_cols].apply(np.log10)
+
+    if post_iter is not None:
+        pname = os.path.join(subdir, "obs_v_sim_postier_{0}.pdf".format(post_iter))
+
+    # pp = PdfPages("HESS_2022-170_supporting_information2.pdf")
+    for ireal in range(12,13):
+        s_b_m_d = os.path.join(subdir, "monthly_model_files_master_{0}".format(ireal))
+        s_s_m_d = os.path.join(subdir, "seq_monthly_model_files_master_{0}".format(ireal))
+        if not os.path.exists(s_s_m_d) or not os.path.exists(s_b_m_d):
+            break
+        try:
+            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+            sw_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x)
+            s_b_oe_pr.loc[:, sw_cols] = s_b_oe_pr.loc[:, sw_cols].apply(np.log10)
+            bpost_iter = s_b_pst.control_data.noptmax
+            if post_iter is not None:
+                bpost_iter = post_iter
+            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                    index_col=0)
+            s_b_oe_pt.loc[:, sw_cols] = s_b_oe_pt.loc[:, sw_cols].apply(np.log10)
+            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
+            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("0.obs.csv") and f.startswith("freyberg")]
+            spost_iter = s_s_pst.control_data.noptmax
+            if post_iter is not None:
+                spost_iter = post_iter
+            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
+                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith("freyberg")]
+
+            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pr}
+            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
+                              seq_oe_files_pt}
+            for key, df in s_s_oe_dict_pr.items():
+                log_cols = df.columns.map(lambda x: "mass" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                s_s_oe_dict_pr[key] = df
+            for key, df in s_s_oe_dict_pt.items():
+                log_cols = df.columns.map(lambda x: "mass" in x)
+                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
+                s_s_oe_dict_pt[key] = df
+
+        except:
+            break
+
+        ognames = keep.copy()
+        ognames.extend(forecast)
+        label_dict = keep_dict.copy()
+        label_dict.update(forecast_dict)
+
+        is_1_lay = True
+        if True in [True if "k:2" in o else False for o in s_b_pst.obs_names]:
+            is_1_lay = False
+
+        for ogname in ognames:
+            # if "cum" not in ogname:
+            #    continue
+            k0name = ogname
+            if is_1_lay:
+                k0ogname = ogname.replace("k:2", "k:0")
+            fig, axes = plt.subplots(2, 1, figsize=(8, 8))
+            cgobs = cobs.loc[cobs.obsnme.str.contains(ogname), :].copy()
+            sgobs = s_b_pst.observation_data.loc[s_b_pst.observation_data.obsnme.str.contains(k0ogname), :].copy()
+            if cgobs.shape[0] == 0:
+                raise Exception("complex empty " + ogname)
+            if sgobs.shape[0] == 0:
+                raise Exception("batch empty " + k0ogname + "," + ogname)
+
+            sgobs.loc[:, "time"] = sgobs.time.apply(float)
+            cgobs.loc[:, "time"] = cgobs.time.apply(float)
+            sgnzobs = sgobs.loc[sgobs.weight > 0, :].copy()
+
+            sgobs.sort_values(by="time", inplace=True)
+            cgobs.sort_values(by="time", inplace=True)
+
+            ax = axes[0]
+            ax.set_title("A) batch formulation {1}, replicate {2}, fixed well scenario".format(m, label_dict[ogname], c_oe.index[ireal]),
+                         loc="left")
+            ax.set_xlabel("Simulation Time (days)")
+            ax.set_ylabel("{0}".format(units_dict[ogname]))
+            obs = mpatches.Patch(color='red', label='Replicate Simulated Quantity')
+            pr = mpatches.Patch(color='grey', label='Prior Realization Simulated Quantity')
+            pt = mpatches.Patch(color='blue', label='Posterior Realization Simulated Quantity')
+            plt.legend(handles=[obs, pr, pt])
+            [ax.plot(sgobs.time, s_b_oe_pr.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in
+             s_b_oe_pr.index]
+            [ax.plot(sgobs.time, s_b_oe_pt.loc[idx, sgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in
+             s_b_oe_pt.index]
+            ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+            ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+            ax = axes[1]
+
+            seq_name = k0ogname
+            if "arrobs" not in k0ogname:
+                seq_name = k0ogname + "_time:10000.0"
+            print(ireal, seq_name)
+            for itime, time in enumerate(sgobs.time):
+                # itime += 1
+
+                if itime in s_s_oe_dict_pr:
+                    oe = s_s_oe_dict_pr[itime]
+                    # print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="0.5",
+                               alpha=0.5)
+                if itime in s_s_oe_dict_pt:
+                    oe = s_s_oe_dict_pt[itime]
+                    # print(oe.loc[:,seq_name])
+                    ax.scatter([time for _ in range(oe.shape[0])], oe.loc[:, seq_name], marker=".", color="b",
+                               alpha=0.5)
+            ax.plot(cgobs.time, c_oe.loc[c_oe.index[ireal], cgobs.obsnme], "r", lw=2.0, alpha=0.85)
+            ax.scatter(sgnzobs.time, sgnzobs.obsval, marker="^", color="r")
+            ax.set_title(
+                "B) sequential formulation {1}, replicate {2}, fixed well scenario".format(m, label_dict[ogname], c_oe.index[ireal]),
+                loc="left")
+            ax.set_xlabel("Simulation Time (days)")
+            ax.set_ylabel("{0}".format(units_dict[ogname]))
+            obs = mpatches.Patch(color='red', label='Replicate Simulated Quantity')
+            pr = mpatches.Patch(color='grey', label='Prior Realization Simulated Quantity')
+            pt = mpatches.Patch(color='blue', label='Posterior Realization Simulated Quantity')
+            plt.legend(handles=[obs, pr, pt])
+            # if "gage" not in ogname:
+            #    ax.set_ylim(30,ax.get_ylim()[1])
+            mn = 1.0e+10
+            mx = -1.0e+10
+            for ax in axes.flatten():
+                mn = min(ax.get_ylim()[0], mn)
+                mx = max(ax.get_ylim()[1], mx)
+            for ax in axes.flatten():
+                ax.set_ylim(mn, mx)
+            plt.tight_layout()
+            plt.savefig(pp, format='pdf')
+            # pp.savefig()
+        m+=1
+
+    pp.close()
+
 if __name__ == "__main__":
 
 
-    # #### MAIN WORKFLOW ####
+    #### MAIN WORKFLOW ####
     #coarse scenario
     sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
@@ -3740,8 +4037,9 @@ if __name__ == "__main__":
                        run_ies=True,run_da=True,adj_init_states=True)
 
 
-    #plotting
+    # plotting
     plot_domain()
+    plot_obs_v_sim_pub(subdir="missing_wel_pars")
     plot_obs_v_sim3(subdir="missing_wel_pars")
     plot_s_vs_s_pub_2(summarize=True)
     plot_s_vs_s_pub_2(summarize=True,subdir="missing_wel_pars")
