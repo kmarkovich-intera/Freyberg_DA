@@ -35,7 +35,7 @@ if "windows" in platform.platform().lower():
 da_path = os.path.join(bin_path, "pestpp-da" + exe)
 ies_path = os.path.join(bin_path, "pestpp-ies" + exe)
 
-keep = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:2_i:2_j:9', 'arrobs_head_k:2_i:33_j:7', 'sfr_usecol:gage_1']
+keep = ['oname:hds_otype:lst_usecol:arrobs_head_k:0_i:13_j:10', 'oname:hds_otype:lst_usecol:arrobs_head_k:2_i:2_j:9', 'oname:hds_otype:lst_usecol:arrobs_head_k:2_i:33_j:7', 'oname:sfr_otype:lst_usecol:gage_1']
 keep_labels = ["gw_1","gw_2","gw_3","sw_1"]
 keep_units = ["$m$","$m$","$m$","$\\frac{m^3}{d}$"]
 keep_dict = {k:l for k,l in zip(keep,keep_labels)}
@@ -50,13 +50,13 @@ keep_dict2 = {k:l for k,l in zip(keep,keep_units)}
 #             "cum_mass_usecol:wel_out","arrobs_conc_k:2_i:26_j:11",]
 # forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
 #                   "gw conc"]
-forecast = ["sfr_usecol:tailwater","sfr_usecol:headwater","arrobs_head_k:0_i:9_j:1"]
+forecast = ["oname:sfr_otype:lst_usecol:tailwater","oname:sfr_otype:lst_usecol:headwater","oname:hds_otype:lst_usecol:arrobs_head_k:0_i:9_j:1"]
 forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{m^3}{d}$","$\\frac{m^3}{d}$","$m$"]
 forecast_dict2 = {k:l for k,l in zip(forecast,forecast_units)}
 
-keep_sngl_lyr = ['arrobs_head_k:0_i:13_j:10', 'arrobs_head_k:0_i:2_j:9', 'arrobs_head_k:0_i:33_j:7', 'sfr_usecol:gage_1']
+keep_sngl_lyr = ['oname:hds_otype:lst_usecol:arrobs_head_k:0_i:13_j:10', 'oname:hds_otype:lst_usecol:arrobs_head_k:0_i:2_j:9', 'oname:hds_otype:lst_usecol:arrobs_head_k:0_i:33_j:7', 'oname:sfr_otype:lst_usecol:gage_1']
 sngl_lyr_dct = {k:l for k,l in zip(keep_sngl_lyr,keep)}
 m_lrc = (1,25,5)
 
@@ -1420,7 +1420,7 @@ def map_complex_to_simple_bat(c_d,b_d,real_idx):
             obs.loc[kobs.obsnme[1:13], "weight"] = 0.005
         else:
             obs.loc[kobs.obsnme[1:13],"weight"] = 2.0
-
+    print(bpst.nnz_obs_names)
     assert bpst.nnz_obs == 48,bpst.nnz_obs
 
     # setup a template dir for this complex model realization
@@ -3995,18 +3995,19 @@ if __name__ == "__main__":
 
     #### MAIN WORKFLOW ####
     #coarse scenario
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+    #sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    #add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    #c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    #b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     
-    m_c_d = run_complex_prior_mc(c_d,num_workers=7)
+    #m_c_d = run_complex_prior_mc(c_d,num_workers=7)
+    #exit()
+    #b_d = "monthly_model_files_template"
+    #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
+    
+    compare_mf6_freyberg(num_workers=10, num_replicates=10,num_reals=100,
+                       run_ies=True)
     exit()
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    
-    compare_mf6_freyberg(num_workers=10, num_replicates=50,num_reals=50,use_sim_states=True,
-                       run_ies=True,run_da=True,adj_init_states=True)
-
     #fixed well scenario
     sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
