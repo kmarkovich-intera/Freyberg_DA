@@ -53,7 +53,7 @@ pst_config["par_dtype"] = np.dtype(
         ("pargp", "U20"),
         ("scale", np.float64),
         ("offset", np.float64),
-        ("dercom", np.int64),
+        ("dercom", int),
     ]
 )
 pst_config["par_fieldnames"] = (
@@ -252,7 +252,13 @@ def read_resfile(resfile):
         if "name" in line.lower():
             header = line.lower().strip().split()
             break
-    res_df = pd.read_csv(f, header=None, names=header, sep=r"\s+", converters=converters)
+    res_df = pd.read_csv(
+        f, header=None, names=header, sep=r"\s+", converters=converters, 
+        usecols=header #on_bad_lines='skip'
+    )
+    # strip the "Cov.", "Mat." and "na" strings that PEST records in the *.res file; make float
+    float_cols = [x for x in res_df.columns if x not in ['name','group']]
+    res_df[float_cols] = res_df[float_cols].replace(['Cov.', 'Mat.', 'na'], np.nan).astype(float)
     res_df.index = res_df.name
     f.close()
     return res_df
@@ -466,7 +472,7 @@ def write_input_files(pst, pst_path="."):
     #        procs.append(p)
     #    for p in procs:
     #        p.join()
-    pool = mp.Pool()
+    pool = mp.Pool(processes=min(mp.cpu_count(), len(chunks), 60))
     x = [
         pool.apply_async(
             _write_chunk_to_template,
@@ -647,11 +653,13 @@ def _populate_dataframe(index, columns, default_dict, dtype):
         This function is called as part of constructing a generic Pst instance
 
     """
-    new_df = pd.DataFrame(index=index, columns=columns)
-    for fieldname, dt in zip(columns, dtype.descr):
-        default = default_dict[fieldname]
-        new_df.loc[:, fieldname] = default
-        new_df.loc[:, fieldname] = new_df.loc[:, fieldname].astype(dt[1])
+    new_df = pd.concat(
+        [pd.Series(default_dict[fieldname],
+                   index=index,
+                   name=fieldname).astype(dt[1])
+         for fieldname, dt in zip(columns, dtype.descr)],
+        axis=1
+    )
     return new_df
 
 
@@ -1034,7 +1042,6 @@ def csv_to_ins_file(
     includes_header=True,
     includes_index=True,
     prefix="",
-    longnames=False,
     head_lines_len=0,
     sep=",",
     gpname=False,
@@ -1101,10 +1108,7 @@ def csv_to_ins_file(
     for rname_org in df.index:
         rname = str(rname_org).strip().lower()
         if rname in row_visit:
-            if longnames:
-                rsuffix = "_" + str(int(row_visit[rname] + 1))
-            else:
-                rsuffix = str(int(row_visit[rname] + 1))
+            rsuffix = "_" + str(int(row_visit[rname] + 1))
             row_visit[rname] += 1
         else:
             row_visit[rname] = 1
@@ -1122,10 +1126,7 @@ def csv_to_ins_file(
     for cname_org in df.columns:
         cname = str(cname_org).strip().lower()
         if cname in col_visit:
-            if longnames:
-                csuffix = "_" + str(int(col_visit[cname] + 1))
-            else:
-                csuffix = str(int(col_visit[cname] + 1))
+            csuffix = "_" + str(int(col_visit[cname] + 1))
             col_visit[cname] += 1
         else:
             col_visit[cname] = 1
@@ -1183,26 +1184,11 @@ def csv_to_ins_file(
                             nprefix = prefix[c_count]
                         else:
                             nprefix = prefix
-                        if longnames:
-                            if len(nprefix) > 0:
-                                nname = f"{nprefix}_usecol:{clabel}"
-                            else:
-                                nname = f"usecol:{clabel}"
-                            oname = f"{nname}_{rlabel}"
+                        if len(nprefix) > 0:
+                            nname = f"{nprefix}_usecol:{clabel}"
                         else:
-                            nname = nprefix + clabel.replace(" ", "").replace("_", "")
-                            oname = (
-                                nprefix
-                                + rlabel.replace(" ", "").replace("_", "")
-                                + clabel.replace(" ", "").replace("_", "")
-                            )
-                            if len(oname) > 20:
-                                raise Exception(
-                                    "csv_to_ins_file(): cant form observation name "
-                                    + " for prefix '{0}' , row '{1}', col '{2}' in less than 20 chars".format(
-                                        nprefix, rlabel, clabel
-                                    )
-                                )
+                            nname = f"usecol:{clabel}"
+                        oname = f"{nname}_{rlabel}"
                         onames.append(oname)  # append list of obs
                         ovals.append(vals[i, j])  # store current obs val
                         # defin group name
@@ -1480,7 +1466,8 @@ class InstructionFile(object):
                         break
                 # copy a version of line commas replaced
                 # (to support comma sep strings)
-                rline = line.replace(",", " ")
+                rline = line.replace(",", " ").replace("\t","")
+
                 cursor_pos = line.index(mstr) + len(mstr)
 
             # line advance
@@ -1517,7 +1504,7 @@ class InstructionFile(object):
                         )
                     )
                 # step over current value
-                cursor_pos = rline.find(" ", cursor_pos)
+                cursor_pos = rline.replace("\t"," ").find(" ", cursor_pos)
                 # now find position of next entry
                 cursor_pos = rline.find(raw[1], cursor_pos)
                 # raw[1]
@@ -1758,7 +1745,7 @@ class InstructionFile(object):
             first = line[: midx[0]].strip()
             tokens = []
             if len(first) > 0:
-                #tokens.append(first)
+                # tokens.append(first)
                 tokens.extend([f.strip() for f in first.split()])
             for idx in range(1, len(midx) - 1, 2):
                 mstr = line[midx[idx - 1] : midx[idx] + 1]
@@ -1828,3 +1815,46 @@ def process_output_files(pst, pst_path="."):
     series = pd.concat(series)
     # print(series)
     return series
+
+
+def check_interface(pst,pst_path=".",warn=False):
+    """check that the tpl and ins file entries are in
+    sync with the control file entries
+
+    Args:
+        pst (`pyemu.Pst`): control file instance
+        pst_path (`str`): the path from where python is running to the control file
+        warn (`bool`): flag to treat errors as warnings
+
+    """
+
+    tpl_pnames = set()
+    for tpl_file in pst.model_input_data.pest_file:
+        names = parse_tpl_file(os.path.join(pst_path,tpl_file))
+        tpl_pnames.update(set(names))
+    pst_pnames = set(pst.par_names)
+    diff = tpl_pnames - pst_pnames
+    mess = ""
+    if len(diff) > 0:
+        mess += "\nthe following par names are not in the ctrl file but are in the tpl files: "+",".join(diff)+"\n\n"
+    diff = pst_pnames - tpl_pnames
+    if len(diff) > 0:
+        mess += "\nthe following par names are not in the tpl files but are in the ctrl file: " + ",".join(diff) + "\n\n"
+    ins_onames = set()
+    for ins_file in pst.model_output_data.pest_file:
+        i = InstructionFile(os.path.join(pst_path,ins_file))
+        ins_onames.update(i.obs_name_set)
+    pst_onames = set(pst.obs_names)
+    diff = ins_onames - pst_onames
+    if len(diff) > 0:
+        mess += "\nthe following obs names are not in the ctrl file but are in the ins files: " + ",".join(
+            diff) + "\n\n"
+    diff = pst_onames - ins_onames
+    if len(diff) > 0:
+        mess += "\nthe following ons names are not in the ins files but are in the ctrl file: " + ",".join(
+            diff) + "\n\n"
+    if len(mess) > 0:
+        if warn:
+            warnings.warn(mess,PyemuWarning)
+        else:
+            raise Exception(mess)

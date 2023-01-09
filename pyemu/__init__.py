@@ -11,6 +11,7 @@ from .la import LinearAnalysis
 from .sc import Schur
 from .ev import ErrVar
 from .en import Ensemble, ParameterEnsemble, ObservationEnsemble
+from .eds import EnDS
 
 # from .mc import MonteCarlo
 # from .inf import Influence
@@ -24,7 +25,7 @@ from .utils import (
     pp_utils,
     os_utils,
     smp_utils,
-    metrics
+    metrics,
 )
 from .plot import plot_utils
 from .logger import Logger
@@ -53,6 +54,6 @@ __all__ = [
     "os_utils",
     "smp_utils",
     "plot_utils",
-    "metrics"
+    "metrics",
 ]
 # del get_versions

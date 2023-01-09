@@ -33,7 +33,7 @@ def setup_pilotpoints_grid(
     pp_dir=".",
     tpl_dir=".",
     shapename="pp.shp",
-    longnames=False,
+    pp_filename_dict={},
 ):
     """setup a regularly-spaced (gridded) pilot point parameterization
 
@@ -58,6 +58,9 @@ def setup_pilotpoints_grid(
         tpl_dir (`str`, optional): directory to write pilot point template file to.  Default is '.'
         shapename (`str`, optional): name of shapefile to write that contains pilot
             point information. Default is "pp.shp"
+        pp_filename_dict (`dict`): optional dict of prefix-pp filename pairs.  prefix values must
+            match the values in `prefix_dict`.  If None, then pp filenames are based on the
+            key values in `prefix_dict`.  Default is None
 
     Returns:
         `pandas.DataFrame`: a dataframe summarizing pilot point information (same information
@@ -80,10 +83,11 @@ def setup_pilotpoints_grid(
             sr = ml.sr
         except AttributeError:
             from pyemu.utils.helpers import SpatialReference
+
             sr = SpatialReference.from_namfile(
                 os.path.join(ml.model_ws, ml.namefile),
                 delr=ml.modelgrid.delr,
-                delc=ml.modelgrid.delc
+                delc=ml.modelgrid.delc,
             )
         if ibound is None:
             ibound = ml.bas6.ibound.array
@@ -123,16 +127,16 @@ def setup_pilotpoints_grid(
                 "from 'sr':{0}:{1}".format(str(e0), str(e1))
             )
     start = int(float(every_n_cell) / 2.0)
-    
+
     # fix for x-section models
-    if xcentergrid.shape[0]==1 :
+    if xcentergrid.shape[0] == 1:
         start_row = 0
-    else : 
+    else:
         start_row = start
 
-    if xcentergrid.shape[1]==1 :
+    if xcentergrid.shape[1] == 1:
         start_col = 0
-    else : 
+    else:
         start_col = start
 
     # check prefix_dict
@@ -204,7 +208,7 @@ def setup_pilotpoints_grid(
                             "name": name,
                             "x": x,
                             "y": y,
-                            "zone": zone,
+                            "zone": zone,  # if use_ibound_zones is False this will always be 1
                             "parval1": parval1,
                             "k": k,
                             "i": i,
@@ -223,15 +227,18 @@ def setup_pilotpoints_grid(
                         ~np.any([prefix.startswith(p) for p in ibound.keys()])
                         and par == "general_zn"
                     ):
-                        base_filename = "{0}pp.dat".format(prefix.replace(":", ""))
+                        if prefix in pp_filename_dict.keys():
+                            base_filename = pp_filename_dict[prefix].replace(":", "")
+                        else:
+                            base_filename = "{0}pp.dat".format(prefix.replace(":", ""))
                         pp_filename = os.path.join(pp_dir, base_filename)
                         # write the base pilot point file
                         write_pp_file(pp_filename, pp_df)
 
                         tpl_filename = os.path.join(tpl_dir, base_filename + ".tpl")
                         # write the tpl file
-                        pilot_points_to_tpl(
-                            pp_df, tpl_filename, name_prefix=prefix, longnames=longnames
+                        pp_df = pilot_points_to_tpl(
+                            pp_df, tpl_filename, name_prefix=prefix,
                         )
                         pp_df.loc[:, "tpl_filename"] = tpl_filename
                         pp_df.loc[:, "pp_filename"] = pp_filename
@@ -243,12 +250,11 @@ def setup_pilotpoints_grid(
                         tpl_files.append(tpl_filename)
 
     par_info = pd.concat(par_info)
-    for field in ["k", "i", "j"]:
-        par_info.loc[:, field] = par_info.loc[:, field].apply(np.int64)
-    for key, default in pst_config["par_defaults"].items():
-        if key in par_info.columns:
-            continue
-        par_info.loc[:, key] = default
+    fields = ["k", "i", "j", "zone"]
+    par_info = par_info.astype({f: int for f in fields}, errors='ignore')
+    defaults = pd.DataFrame(pst_config["par_defaults"], index=par_info.index)
+    missingcols = defaults.columns.difference(par_info.columns)
+    par_info.loc[:, missingcols] = defaults
 
     if shapename is not None:
         try:
@@ -262,17 +268,26 @@ def setup_pilotpoints_grid(
             shp = shapefile.Writer(target=shapename, shapeType=shapefile.POINT)
         except:
             shp = shapefile.Writer(shapeType=shapefile.POINT)
-        for name, dtype in par_info.dtypes.iteritems():
+        for name, dtype in par_info.dtypes.items():
             if dtype == object:
                 shp.field(name=name, fieldType="C", size=50)
-            elif dtype in [int, np.int, np.int64, np.int32]:
+            elif dtype in [int]:#, np.int64, np.int32]:
                 shp.field(name=name, fieldType="N", size=50, decimal=0)
-            elif dtype in [float, np.float, np.float32, np.float64]:
+            elif dtype in [float, np.float32, np.float64]:
                 shp.field(name=name, fieldType="N", size=50, decimal=10)
             else:
-                raise Exception(
-                    "unrecognized field type in par_info:{0}:{1}".format(name, dtype)
-                )
+                try:
+                    if dtype in [np.int64, np.int32]:
+                        shp.field(name=name, fieldType="N", size=50, decimal=0)
+                    else:
+                        raise Exception(
+                            "unrecognized field type in par_info:{0}:{1}".format(name, dtype)
+                        )
+
+                except Exception as e:
+                    raise Exception(
+                        "unrecognized field type in par_info:{0}:{1}".format(name, dtype)
+                    )
 
         # some pandas awesomeness..
         par_info.apply(lambda x: shp.point(x.x, x.y), axis=1)
@@ -281,9 +296,10 @@ def setup_pilotpoints_grid(
             shp.save(shapename)
         except:
             shp.close()
-
+        shp.close()
         shp = shapefile.Reader(shapename)
         assert shp.numRecords == par_info.shape[0]
+        shp.close()
     return par_info
 
 
@@ -437,14 +453,23 @@ def write_pp_shapfile(pp_df, shapename=None):
     for name, dtype in dfs[0].dtypes.iteritems():
         if dtype == object:
             shp.field(name=name, fieldType="C", size=50)
-        elif dtype in [int, np.int, np.int64, np.int32]:
+        elif dtype in [int]:#, np.int, np.int64, np.int32]:
             shp.field(name=name, fieldType="N", size=50, decimal=0)
-        elif dtype in [float, np.float, np.float32, np.float32]:
+        elif dtype in [float, np.float32, np.float32]:
             shp.field(name=name, fieldType="N", size=50, decimal=8)
         else:
-            raise Exception(
-                "unrecognized field type in pp_df:{0}:{1}".format(name, dtype)
-            )
+            try:
+                if dtype in [np.int64, np.int32]:
+                    shp.field(name=name, fieldType="N", size=50, decimal=0)
+                else:
+                    raise Exception(
+                        "unrecognized field type in par_info:{0}:{1}".format(name, dtype)
+                    )
+
+            except Exception as e:
+                raise Exception(
+                    "unrecognized field type in par_info:{0}:{1}".format(name, dtype)
+                )
 
     # some pandas awesomeness..
     for df in dfs:
@@ -481,7 +506,7 @@ def write_pp_file(filename, pp_df):
         )
 
 
-def pilot_points_to_tpl(pp_file, tpl_file=None, name_prefix=None, longnames=False):
+def pilot_points_to_tpl(pp_file, tpl_file=None, name_prefix=None):
     """write a template file for a pilot points file
 
     Args:
@@ -501,7 +526,7 @@ def pilot_points_to_tpl(pp_file, tpl_file=None, name_prefix=None, longnames=Fals
 
     Example::
 
-        pyemu.pp_utils.pilot_points_to_tpl("my_pps.dat",name_prefix="my_pps",longnames=True)
+        pyemu.pp_utils.pilot_points_to_tpl("my_pps.dat",name_prefix="my_pps")
 
 
     """
@@ -512,86 +537,48 @@ def pilot_points_to_tpl(pp_file, tpl_file=None, name_prefix=None, longnames=Fals
     else:
         assert os.path.exists(pp_file)
         pp_df = pd.read_csv(pp_file, delim_whitespace=True, header=None, names=PP_NAMES)
-
+    pp_df = pp_df.astype({'zone': int}, errors='ignore')
     if tpl_file is None:
         tpl_file = pp_file + ".tpl"
 
-    if longnames:
-        if name_prefix is not None:
-            if "i" in pp_df.columns and "j" in pp_df.columns:
-                pp_df.loc[:, "parnme"] = pp_df.apply(
-                    lambda x: "{0}_i:{1}_j:{2}".format(name_prefix, int(x.i), int(x.j)),
-                    axis=1,
-                )
-            elif "x" in pp_df.columns and "y" in pp_df.columns:
-                pp_df.loc[:, "parnme"] = pp_df.apply(
-                    lambda x: "{0}_x:{1}_y:{2}".format(name_prefix, x.x, x.y),
-                    axis=1,
-                )
-            else:
-                pp_df.loc[:, "idx"] = np.arange(pp_df.shape[0])
-                pp_df.loc[:, "parnme"] = pp_df.apply(
-                    lambda x: "{0}_ppidx:{1}".format(name_prefix, x.idx),
-                    axis=1,
-                )
-            if "zone" in pp_df.columns:
-                pp_df.loc[:, "parnme"] = pp_df.apply(
-                    lambda x: x.parnme + "_zone:{0}".format(x.zone), axis=1
-                )
-            pp_df.loc[:, "tpl"] = pp_df.parnme.apply(
-                lambda x: "~    {0}    ~".format(x)
+    if name_prefix is not None:
+        if "i" in pp_df.columns and "j" in pp_df.columns:
+            pp_df.loc[:, "parnme"] = pp_df.apply(
+                lambda x: "{0}_i:{1}_j:{2}".format(name_prefix, int(x.i), int(x.j)),
+                axis=1,
+            )
+        elif "x" in pp_df.columns and "y" in pp_df.columns:
+            pp_df.loc[:, "parnme"] = pp_df.apply(
+                lambda x: "{0}_x:{1:0.2f}_y:{2:0.2f}".format(name_prefix, x.x, x.y),
+                axis=1,
             )
         else:
-            names = pp_df.name.copy()
-            pp_df.loc[:, "parnme"] = pp_df.name
-            pp_df.loc[:, "tpl"] = pp_df.parnme.apply(
-                lambda x: "~    {0}    ~".format(x)
+            pp_df.loc[:, "idx"] = np.arange(pp_df.shape[0])
+            pp_df.loc[:, "parnme"] = pp_df.apply(
+                lambda x: "{0}_ppidx:{1}".format(name_prefix, x.idx),
+                axis=1,
             )
-        _write_df_tpl(
-            tpl_file,
-            pp_df.loc[:, ["name", "x", "y", "zone", "tpl"]],
-            sep=" ",
-            index_label="index",
-            header=False,
-            index=False,
-            quotechar=" ",
-            quoting=2,
+        if "zone" in pp_df.columns:
+            pp_df.loc[:, "parnme"] = pp_df.apply(
+                lambda x: x.parnme + "_zone:{0}".format(x.zone), axis=1
+            )
+        pp_df.loc[:, "tpl"] = pp_df.parnme.apply(
+            lambda x: "~    {0}    ~".format(x)
         )
     else:
-        if name_prefix is not None:
-            digits = str(len(str(pp_df.shape[0])))
-            fmt = "{0:0" + digits + "d}"
-            if len(name_prefix) + 1 + int(digits) > 12:
-                warnings.warn("name_prefix too long for parameter names", PyemuWarning)
-            names = [
-                "{0}_{1}".format(name_prefix, fmt.format(i))
-                for i in range(pp_df.shape[0])
-            ]
-        else:
-            names = pp_df.name.copy()
-        too_long = []
-        for name in names:
-            if len(name) > 12:
-                too_long.append(name)
-        if len(too_long) > 0:
-            raise Exception(
-                "the following parameter names are too long:" + ",".join(too_long)
-            )
-        tpl_entries = ["~    {0}    ~".format(name) for name in names]
-        pp_df.loc[:, "tpl"] = tpl_entries
-        pp_df.loc[:, "parnme"] = names
-        f_tpl = open(tpl_file, "w")
-        f_tpl.write("ptf ~\n")
-        f_tpl.write(
-            pp_df.to_string(
-                col_space=0,
-                columns=["name", "x", "y", "zone", "tpl"],
-                formatters=PP_FMT,
-                justify="left",
-                header=False,
-                index=False,
-            )
-            + "\n"
+        pp_df.loc[:, "parnme"] = pp_df.name
+        pp_df.loc[:, "tpl"] = pp_df.parnme.apply(
+            lambda x: "~    {0}    ~".format(x)
         )
+    _write_df_tpl(
+        tpl_file,
+        pp_df.loc[:, ["name", "x", "y", "zone", "tpl"]],
+        sep=" ",
+        index_label="index",
+        header=False,
+        index=False,
+        quotechar=" ",
+        quoting=2,
+    )
 
     return pp_df

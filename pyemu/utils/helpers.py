@@ -11,10 +11,9 @@ import platform
 import struct
 import shutil
 import copy
-import time
 from ast import literal_eval
 import traceback
-import sys
+import re
 import numpy as np
 import pandas as pd
 
@@ -31,8 +30,212 @@ import pyemu
 from pyemu.utils.os_utils import run, start_workers
 
 
+class Trie:
+    """Regex::Trie in Python. Creates a Trie out of a list of words. The trie can be exported to a Regex pattern.
+    The corresponding Regex should match much faster than a simple Regex union."""
+    # after https://gist.github.com/EricDuminil/8faabc2f3de82b24e5a371b6dc0fd1e0
+    def __init__(self):
+        self.data = {}
+
+    def add(self, word):
+        ref = self.data
+        for char in word:
+            ref[char] = char in ref and ref[char] or {}
+            ref = ref[char]
+        ref[''] = 1
+
+    def dump(self):
+        return self.data
+
+    def quote(self, char):
+        return re.escape(char)
+
+    def _pattern(self, pData):
+        data = pData
+        if "" in data and len(data.keys()) == 1:
+            return None
+
+        alt = []
+        cc = []
+        q = 0
+        for char in sorted(data.keys()):
+            if isinstance(data[char], dict):
+                try:
+                    recurse = self._pattern(data[char])
+                    alt.append(self.quote(char) + recurse)
+                except:
+                    cc.append(self.quote(char))
+            else:
+                q = 1
+        cconly = not len(alt) > 0
+
+        if len(cc) > 0:
+            if len(cc) == 1:
+                alt.append(cc[0])
+            else:
+                alt.append('[' + ''.join(cc) + ']')
+
+        if len(alt) == 1:
+            result = alt[0]
+        else:
+            result = "(?:" + "|".join(alt) + ")"
+
+        if q:
+            if cconly:
+                result += "?"
+            else:
+                result = "(?:%s)?" % result
+        return result
+
+    def pattern(self):
+        return self._pattern(self.dump())
+
+def autocorrelated_draw(pst,struct_dict,time_distance_col="distance",num_reals=100,verbose=True,
+                        enforce_bounds=False, draw_ineq=False):
+    """construct an autocorrelated observation noise ensemble from covariance matrices
+        implied by geostatistical structure(s).
+
+        Args:
+            pst (`pyemu.Pst`): a control file (or the name of control file).  The
+                information in the `* observation data` dataframe is used extensively,
+                including weight, standard_deviation (if present), upper_bound/lower_bound (if present).
+            time_distance_col (str): the column in `* observation_data` that represents the distance in time
+            for each observation listed in `struct_dict`
+
+            struct_dict (`dict`): a dict of GeoStruct (or structure file), and list of
+                observation names.
+            num_reals (`int`, optional): number of realizations to draw.  Default is 100
+
+            verbose (`bool`, optional): flag to control output to stdout.  Default is True.
+                flag for stdout.
+            enforce_bounds (`bool`, optional): flag to enforce `lower_bound` and `upper_bound` if
+                these are present in `* observation data`.  Default is False
+            draw_ineq (`bool`, optional): flag to generate noise realizations for inequality observations.
+                If False, noise will not be added inequality observations in the ensemble.  Default is False
+
+
+        Returns
+            **pyemu.ObservationEnsemble**: the realized noise ensemble added to the observation values in the
+                control file.
+
+        Note:
+            The variance of each observation is used to scale the resulting geostatistical
+            covariance matrix (as defined by the weight or optional standard deviation.
+            Therefore, the sill of the geostatistical structures
+            in `struct_dict` should be 1.0
+
+        Example::
+
+            pst = pyemu.Pst("my.pst")
+            #assuming there is only one timeseries of observations
+            # and they are spaced one time unit apart
+            pst.observation_data.loc[:,"distance"] = np.arange(pst.nobs)
+            v = pyemu.geostats.ExpVario(a=10) #units of `a` are time units
+            gs = pyemu.geostats.Geostruct(variograms=v)
+            sd = {gs:["obs1","obs2",""obs3]}
+            oe = pyemu.helpers.autocorrelated_draws(pst,struct_dict=sd}
+            oe.to_csv("my_oe.csv")
+
+
+        """
+
+    #check that the required time metadata is appropriate
+    passed_names = []
+    nz_names = pst.nnz_obs_names
+    [passed_names.extend(obs) for gs,obs in struct_dict.items()]
+    missing = list(set(passed_names) - set(nz_names))
+    if len(missing) > 0:
+        raise Exception("the following obs in struct_dict were not found in the nz obs names"+str(missing))
+    obs = pst.observation_data
+    if time_distance_col not in obs.columns:
+        raise Exception("time_distance_col missing")
+    dvals = obs.loc[passed_names,time_distance_col]
+    pobs = obs.loc[passed_names,:]
+    isna = pobs.loc[pd.isna(dvals),"obsnme"]
+    if isna.shape[0] > 0:
+        raise Exception("the following struct dict observations have NaN for time_distance_col: {0}".format(str(isna)))
+    if verbose:
+        print("--> getting full diagonal cov matrix")
+    fcov = pyemu.Cov.from_observation_data(pst)
+    fcov_dict = {o:np.sqrt(fcov.x[i]) for i,o in enumerate(fcov.names)}
+    if verbose:
+        print("-->draw full obs en from diagonal cov")
+    full_oe = pyemu.ObservationEnsemble.from_gaussian_draw(pst,fcov,num_reals=num_reals,fill=True)
+    for gs,onames in struct_dict.items():
+        if verbose:
+            print("-->processing cov matrix for {0} items with gs {1}".format(len(onames),gs))
+        dvals = obs.loc[onames,time_distance_col].values
+        gcov = gs.covariance_matrix(dvals,np.ones(len(onames)),names=onames)
+        if verbose:
+            print("...scaling rows and cols")
+        for i,name in enumerate(gcov.names):
+            gcov.x[:,i] *= fcov_dict[name]
+            gcov.x[i, :] *= fcov_dict[name]
+        if verbose:
+            print("...draw")
+        oe = pyemu.ObservationEnsemble.from_gaussian_draw(pst,gcov,num_reals=num_reals,fill=True,by_groups=False)
+        oe = oe.loc[:,gcov.names]
+        full_oe.loc[:,gcov.names] = oe._df.values
+
+    if enforce_bounds:
+        if verbose:
+            print("-->enforcing bounds")
+        ub_dict = {o:1e300 for o in full_oe.columns}
+        if "upper_bound" in pst.observation_data.columns:
+            ub_dict.update(pst.observation_data.upper_bound.fillna(1.0e300).to_dict())
+
+        lb_dict = {o:-1e300 for o in full_oe.columns}
+        if "lower_bound" in pst.observation_data.columns:
+            lb_dict.update(pst.observation_data.lower_bound.fillna(-1.0e300).to_dict())
+        allvals = full_oe.values
+        for i,name in enumerate(full_oe.columns):
+            #print("before:",name,ub_dict[name],full_oe.loc[:,name].max(),lb_dict[name],full_oe.loc[:,name].min())
+            #vals = full_oe.loc[:,name].values
+            vals = allvals[:,i]
+            vals[vals>ub_dict[name]] = ub_dict[name]
+            vals[vals < lb_dict[name]] = lb_dict[name]
+            #full_oe.loc[:,name] = vals#oe.loc[:,name].apply(lambda x: min(x,ub_dict[name])).apply(lambda x: max(x,lb_dict[name]))
+            allvals[:,i] = vals
+            #print("...after:", name, ub_dict[name],full_oe.loc[:, name].max(),  lb_dict[name], full_oe.loc[:, name].min(), )
+
+    if not draw_ineq:
+        obs = pst.observation_data
+        #lt_tags = pst.get_constraint_tags("lt")
+        #lt_onames = [oname for oname,ogrp in zip(obs.obsnme,obs.obgnme) if True in [True if str(ogrp).startswith(tag) else False for tag in lt_tags]  ]
+        lt_onames = pst.less_than_obs_constraints.to_list()
+        if verbose:
+            print("--> less than ineq obs:",lt_onames)
+        lt_dict = obs.loc[lt_onames,"obsval"].to_dict()
+        for n,v in lt_dict.items():
+            full_oe.loc[:,n] = v
+        obs = pst.observation_data
+        #gt_tags = pst.get_constraint_tags("gt")
+        #gt_onames = [oname for oname, ogrp in zip(obs.obsnme, obs.obgnme) if
+        #             True in [True if str(ogrp).startswith(tag) else False for tag in gt_tags]]
+        gt_onames = pst.greater_than_obs_constraints.to_list()
+        if verbose:
+            print("--> greater than ineq obs:", gt_onames)
+        gt_dict = obs.loc[gt_onames, "obsval"].to_dict()
+        for n, v in gt_dict.items():
+            full_oe.loc[:, n] = v
+    return full_oe
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def geostatistical_draws(
-    pst, struct_dict, num_reals=100, sigma_range=4, verbose=True, scale_offset=True
+    pst, struct_dict, num_reals=100, sigma_range=4, verbose=True,
+        scale_offset=True, subset=None
 ):
     """construct a parameter ensemble from a prior covariance matrix
     implied by geostatistical structure(s) and parameter bounds.
@@ -54,6 +257,8 @@ def geostatistical_draws(
         scale_offset (`bool`,optional): flag to apply scale and offset to parameter bounds
             when calculating variances - this is passed through to `pyemu.Cov.from_parameter_data()`.
             Default is True.
+        subset (`array-like`, optional): list, array, set or pandas index defining subset of paramters
+            for draw.
 
     Returns
         **pyemu.ParameterEnsemble**: the realized parameter ensemble.
@@ -82,9 +287,16 @@ def geostatistical_draws(
     )
     if verbose:
         print("building diagonal cov")
-
+    if subset is not None:
+        if subset.empty or subset.intersection(pst.par_names).empty:
+            warnings.warn(
+                "Empty subset passed to draw method, or no intersecting pars "
+                "with pst...\nwill draw full cov", PyemuWarning
+            )
+            subset = None
     full_cov = pyemu.Cov.from_parameter_data(
-        pst, sigma_range=sigma_range, scale_offset=scale_offset
+        pst, sigma_range=sigma_range, scale_offset=scale_offset,
+        subset=subset
     )
     full_cov_dict = {n: float(v) for n, v in zip(full_cov.col_names, full_cov.x)}
 
@@ -130,14 +342,14 @@ def geostatistical_draws(
             for req in ["x", "y", "parnme"]:
                 if req not in df.columns:
                     raise Exception("{0} is not in the columns".format(req))
-            missing = df.loc[df.parnme.apply(lambda x: x not in par.parnme), "parnme"]
+            missing = df.loc[~df.parnme.isin(par.parnme), "parnme"]
             if len(missing) > 0:
                 warnings.warn(
                     "the following parameters are not "
                     + "in the control file: {0}".format(",".join(missing)),
                     PyemuWarning,
                 )
-                df = df.loc[df.parnme.apply(lambda x: x not in missing)]
+                df = df.loc[~df.parnme.isin(missing)]
             if df.shape[0] == 0:
                 warnings.warn(
                     "geostatistical_draws(): empty parameter df at position {0} items for geostruct {1}, skipping...".format(
@@ -151,7 +363,7 @@ def geostatistical_draws(
             aset = set(pst.adj_par_names)
             for zone in zones:
                 df_zone = df.loc[df.zone == zone, :].copy()
-                df_zone = df_zone.loc[df_zone.parnme.apply(lambda x: x in aset), :]
+                df_zone = df_zone.loc[df_zone.parnme.isin(aset), :]
                 if df_zone.shape[0] == 0:
                     warnings.warn(
                         "all parameters in zone {0} tied and/or fixed, skipping...".format(
@@ -351,8 +563,8 @@ def geostatistical_prior_builder(
                     df_zone.to_csv("prior_builder_crash.csv")
                     raise Exception("error inverting cov {0}".format(cov.row_names[:3]))
 
-                    if verbose:
-                        print("replace in full cov")
+                if verbose:
+                    print("replace in full cov")
                 full_cov.replace(cov)
                 # d = np.diag(full_cov.x)
                 # idx = np.argwhere(d==0.0)
@@ -479,7 +691,7 @@ def calc_observation_ensemble_quantiles(
 
 def calc_rmse_ensemble(ens, pst, bygroups=True, subset_realizations=None):
     """
-    DEPRECATED -->please see pyemu.utils.metrics.calc_metric_ensemble() 
+    DEPRECATED -->please see pyemu.utils.metrics.calc_metric_ensemble()
     Calculates RMSE (without weights) to quantify fit to observations for ensemble members
 
     Args:
@@ -493,7 +705,9 @@ def calc_rmse_ensemble(ens, pst, bygroups=True, subset_realizations=None):
         **pandas.DataFrame**: rows are realizations. Columns are groups. Content is RMSE
     """
 
-    raise Exception('this is deprecated-->please see pyemu.utils.metrics.calc_metric_ensemble()')
+    raise Exception(
+        "this is deprecated-->please see pyemu.utils.metrics.calc_metric_ensemble()"
+    )
 
 
 def _condition_on_par_knowledge(cov, var_knowledge_dict):
@@ -937,7 +1151,7 @@ def simple_ins_from_obs(obsnames, insfilename="model.output.ins"):
     """
     with open(insfilename, "w") as ofp:
         ofp.write("pif ~\n")
-        [ofp.write("!{0}!\n".format(cob)) for cob in obsnames]
+        [ofp.write("l1 !{0}!\n".format(cob)) for cob in obsnames]
 
 
 def pst_from_parnames_obsnames(
@@ -1908,7 +2122,7 @@ class PstFromFlopyModel(object):
             self.log("setting up '{0}' dir".format(d))
             if os.path.exists(d):
                 if self.remove_existing:
-                    shutil.rmtree(d, onerror=remove_readonly)
+                    pyemu.os_utils._try_remove_existing(d)
                 else:
                     raise Exception("dir '{0}' already exists".format(d))
             os.mkdir(d)
@@ -1952,7 +2166,7 @@ class PstFromFlopyModel(object):
             self.sr = SpatialReference.from_namfile(
                 os.path.join(self.org_model_ws, self.m.namefile),
                 delr=self.m.modelgrid.delr,
-                delc=self.m.modelgrid.delc
+                delc=self.m.modelgrid.delc,
             )
         self.log("updating model attributes")
         self.m.array_free_format = True
@@ -1964,8 +2178,7 @@ class PstFromFlopyModel(object):
                 self.logger.lraise("'new_model_ws' already exists")
             else:
                 self.logger.warn("removing existing 'new_model_ws")
-                shutil.rmtree(new_model_ws, onerror=pyemu.os_utils._remove_readonly)
-                time.sleep(1)
+                pyemu.os_utils._try_remove_existing(new_model_ws)
         self.m.change_model_ws(new_model_ws, reset_external=True)
         self.m.exe_name = self.m.exe_name.replace(".exe", "")
         self.m.exe = self.m.version
@@ -3529,10 +3742,12 @@ class PstFromFlopyModel(object):
             return
         hob_out_unit = self.m.hob.iuhobsv
         new_hob_out_fname = os.path.join(
-            self.m.model_ws, self.m.get_output_attribute(unit=hob_out_unit, attr='fname')
+            self.m.model_ws,
+            self.m.get_output_attribute(unit=hob_out_unit, attr="fname"),
         )
         org_hob_out_fname = os.path.join(
-            self.org_model_ws, self.m.get_output_attribute(unit=hob_out_unit, attr='fname')
+            self.org_model_ws,
+            self.m.get_output_attribute(unit=hob_out_unit, attr="fname"),
         )
 
         if not os.path.exists(org_hob_out_fname):
@@ -3630,15 +3845,22 @@ def apply_list_and_array_pars(arr_par_file="mult2model_info.csv", chunk_len=50):
     """
     df = pd.read_csv(arr_par_file, index_col=0)
     if "operator" not in df.columns:
-        df.loc[:,"operator"] = "m"
-    df.loc[pd.isna(df.operator),"operator"] = "m"
+        df.loc[:, "operator"] = "m"
+    df.loc[pd.isna(df.operator), "operator"] = "m"
+    file_cols = df.columns.values[df.columns.str.contains("file")]
+    for file_col in file_cols:
+        df.loc[:, file_col] = df.loc[:, file_col].apply(
+            lambda x: os.path.join(*x.replace("\\","/").split("/"))
+            if isinstance(x,str) else x
+        )
     arr_pars = df.loc[df.index_cols.isna()].copy()
     list_pars = df.loc[df.index_cols.notna()].copy()
     # extract lists from string in input df
-    list_pars["index_cols"] = list_pars.index_cols.apply(lambda x: literal_eval(x))
-    list_pars["use_cols"] = list_pars.use_cols.apply(lambda x: literal_eval(x))
-    list_pars["lower_bound"] = list_pars.lower_bound.apply(lambda x: literal_eval(x))
-    list_pars["upper_bound"] = list_pars.upper_bound.apply(lambda x: literal_eval(x))
+    list_pars["index_cols"] = list_pars.index_cols.apply(literal_eval)
+    list_pars["use_cols"] = list_pars.use_cols.apply(literal_eval)
+    list_pars["lower_bound"] = list_pars.lower_bound.apply(literal_eval)
+    list_pars["upper_bound"] = list_pars.upper_bound.apply(literal_eval)
+
     # TODO check use_cols is always present
     apply_genericlist_pars(list_pars, chunk_len=chunk_len)
     apply_array_pars(arr_pars, chunk_len=chunk_len)
@@ -3658,7 +3880,7 @@ def _process_chunk_array_files(chunk, i, df):
 
 def _process_array_file(model_file, df):
     if "operator" not in df.columns:
-        df.loc[:,"operator"] = "m"
+        df.loc[:, "operator"] = "m"
     # find all mults that need to be applied to this array
     df_mf = df.loc[df.model_file == model_file, :]
     results = []
@@ -3668,7 +3890,7 @@ def _process_array_file(model_file, df):
     org_arr = np.loadtxt(org_file[0])
 
     if "mlt_file" in df_mf.columns:
-        for mlt,operator in zip(df_mf.mlt_file,df_mf.operator):
+        for mlt, operator in zip(df_mf.mlt_file, df_mf.operator):
             if pd.isna(mlt):
                 continue
             mlt_data = np.loadtxt(mlt)
@@ -3683,7 +3905,11 @@ def _process_array_file(model_file, df):
             elif operator == "+" or operator.lower()[0] == "a":
                 org_arr += mlt_data
             else:
-                raise Exception("unrecognized operator '{0}' for mlt file '{1}'".format(operator,mlt))
+                raise Exception(
+                    "unrecognized operator '{0}' for mlt file '{1}'".format(
+                        operator, mlt
+                    )
+                )
         if "upper_bound" in df.columns:
             ub_vals = df_mf.upper_bound.value_counts().dropna().to_dict()
             if len(ub_vals) == 0:
@@ -3795,7 +4021,7 @@ def apply_array_pars(arr_par="arr_pars.csv", arr_par_file=None, chunk_len=50):
         if len(chunks) == 1:
             _process_chunk_fac2real(chunks[0], 0)
         else:
-            pool = mp.Pool()
+            pool = mp.Pool(processes=min(mp.cpu_count(), len(chunks), 60))
             x = [
                 pool.apply_async(_process_chunk_fac2real, args=(chunk, i))
                 for i, chunk in enumerate(chunks)
@@ -3836,7 +4062,7 @@ def apply_array_pars(arr_par="arr_pars.csv", arr_par_file=None, chunk_len=50):
     #     r = p.get(False)
     #     p.join()
     else:
-        pool = mp.Pool()
+        pool = mp.Pool(processes=min(mp.cpu_count(), len(chunks), 60))
         x = [
             pool.apply_async(_process_chunk_array_files, args=(chunk, i, df))
             for i, chunk in enumerate(chunks)
@@ -4007,6 +4233,10 @@ def calc_array_par_summary_stats(arr_par_file="mult2model_info.csv"):
     df = df.loc[df.index_cols.isna(), :].copy()
     if df.shape[0] == 0:
         return None
+    file_cols = df.columns.values[df.columns.str.contains("file")]
+    for file_col in file_cols:
+        df.loc[:, file_col] = df.loc[:, file_col].apply(
+            lambda x: os.path.join(*x.replace("\\", "/").split("/")) if isinstance(x, str) else x)
     model_input_files = df.model_file.unique()
     model_input_files.sort()
     records = dict()
@@ -4151,7 +4381,7 @@ def apply_genericlist_pars(df, chunk_len=50):
     if len(chunks) == 1:
         _process_chunk_list_files(chunks[0], 0, df)
     else:
-        pool = mp.Pool()
+        pool = mp.Pool(processes=min(mp.cpu_count(), len(chunks), 60))
         x = [
             pool.apply_async(_process_chunk_list_files, args=(chunk, i, df))
             for i, chunk in enumerate(chunks)
@@ -4229,19 +4459,21 @@ def _process_list_file(model_file, df):
         )
 
     # if writen by PstFrom this should always be comma delim - tidy
-    org_data = pd.read_csv(org_file, skiprows=datastrtrow, header=header)
+    org_data = pd.read_csv(org_file, skiprows=datastrtrow,
+                           header=header, dtype='object')
     # mult columns will be string type, so to make sure they align
     org_data.columns = org_data.columns.astype(str)
     # print("org_data columns:", org_data.columns)
     # print("org_data shape:", org_data.shape)
     new_df = org_data.copy()
     for mlt in df_mf.itertuples():
-
+        new_df.loc[:, mlt.index_cols] = new_df.loc[:, mlt.index_cols].apply(
+            pd.to_numeric, errors='ignore', downcast='integer')
         try:
-            new_df = (
-                new_df.reset_index()
-                .rename(columns={"index": "oidx"})
-                .set_index(mlt.index_cols)
+            new_df = new_df.reset_index().rename(
+                columns={"index": "oidx"}
+            ).set_index(
+                mlt.index_cols
             )
             new_df = new_df.sort_index()
         except Exception as e:
@@ -4280,15 +4512,19 @@ def _process_list_file(model_file, df):
             mlt_cols = [str(col) for col in mlt.use_cols]
             operator = mlt.operator
             if operator == "*" or operator.lower()[0] == "m":
-                new_df.loc[common_idx, mlt_cols] = (
-                    new_df.loc[common_idx, mlt_cols] * mlts.loc[common_idx, mlt_cols]
-                ).values
+                new_df.loc[common_idx, mlt_cols] = \
+                    new_df.loc[common_idx, mlt_cols].apply(
+                        pd.to_numeric) * mlts.loc[common_idx, mlt_cols]
             elif operator == "+" or operator.lower()[0] == "a":
-                new_df.loc[common_idx, mlt_cols] = (
-                        new_df.loc[common_idx, mlt_cols] + mlts.loc[common_idx, mlt_cols]
-                ).values
+                new_df.loc[common_idx, mlt_cols] = \
+                    new_df.loc[common_idx, mlt_cols].apply(
+                        pd.to_numeric) + mlts.loc[common_idx, mlt_cols]
             else:
-                raise Exception("unsupported operator '{0}' for mlt file '{1}'".format(operator,mlt.mlt_file))
+                raise Exception(
+                    "unsupported operator '{0}' for mlt file '{1}'".format(
+                        operator, mlt.mlt_file
+                    )
+                )
         # bring mult index back to columns AND re-order
         new_df = new_df.reset_index().set_index("oidx")[org_data.columns].sort_index()
     if "upper_bound" in df.columns:
@@ -4298,7 +4534,9 @@ def _process_list_file(model_file, df):
         ).max()
         if ub.notnull().any():
             for col, val in ub.items():
-                new_df.loc[new_df.loc[:, col] > val, col] = val
+                numeric = new_df.loc[new_df[col].apply(np.isreal)]
+                sel = numeric.loc[numeric[col] > val].index
+                new_df.loc[sel, col] = val
     if "lower_bound" in df.columns:
         lb = df_mf.apply(
             lambda x: pd.Series({str(c): b for c, b in zip(x.use_cols, x.lower_bound)}),
@@ -4306,7 +4544,9 @@ def _process_list_file(model_file, df):
         ).min()
         if lb.notnull().any():
             for col, val in lb.items():
-                new_df.loc[new_df.loc[:, col] < val, col] = val
+                numeric = new_df.loc[new_df[col].apply(np.isreal)]
+                sel = numeric.loc[numeric[col] < val].index
+                new_df.loc[sel, col] = val
     with open(model_file, "w") as fo:
         kwargs = {}
         if "win" in platform.platform().lower():
@@ -4317,7 +4557,11 @@ def _process_list_file(model_file, df):
         if fmt.lower() == "free":
             new_df.to_csv(fo, index=False, mode="a", sep=sep, header=hheader, **kwargs)
         else:
-            np.savetxt(fo, np.atleast_2d(new_df.values), fmt=fmt)
+            np.savetxt(
+                fo,
+                np.atleast_2d(new_df.apply(pd.to_numeric, errors="ignore").values),
+                fmt=fmt
+            )
 
 
 def write_const_tpl(name, tpl_file, suffix, zn_array=None, shape=None, longnames=False):
@@ -5914,6 +6158,84 @@ class SpatialReference(object):
         self._vertices = self.get_vertices(ii, jj)
 
 
+def maha_based_pdc(sim_en):
+    """prototype for detecting prior-data conflict following Alfonso and Oliver 2019
+
+    Args:
+        sim_en (`pyemu.ObservationEnsemble`): a simulated outputs ensemble
+
+    Returns:
+
+        tuple containing
+
+        - **pandas.DataFrame**: 1-D subspace squared mahalanobis distances
+            that exceed the `l1_crit_val` threshold
+        - **pandas.DataFrame**: 2-D subspace squared mahalanobis distances
+            that exceed the `l2_crit_val` threshold
+
+    Note:
+        Noise realizations are added to `sim_en` to account for measurement
+            noise.
+
+
+
+    """
+    groups = sim_en.pst.nnz_obs_groups
+    obs = sim_en.pst.observation_data
+    z_scores = {}
+    dm_xs = {}
+    p_vals = {}
+    for group in groups:
+        nzobs = obs.loc[obs.obgnme==group,:]
+        nzobs = nzobs.loc[nzobs.weight > 0,:].copy()
+        nzsim_en = sim_en._df.loc[:,nzobs.obsnme].copy()
+        ne,nx = nzsim_en.shape
+        ns = ne - 1
+        delta = 2.0/(float(ns) + 2.)
+        v = nzsim_en.var(axis=0).mean()
+        x = nzsim_en.values.copy()
+        z = nzobs.obsval.values.copy()
+        dm_x,dm_z = [],[]
+        for ireal in range(ne):
+            x_s = x.copy()
+            x_s = np.delete(x_s,(ireal),axis=0)
+            first = delta * v * (((ns -1)/(1-delta))*np.eye(ns))
+            a_s = first + np.dot(x_s, x_s.T)
+            lower = np.linalg.cholesky(a_s)
+            lower = np.linalg.inv(lower)
+            mu_hat = x_s.mean(axis=0)
+            dm_x.append(_maha(delta,v,x_s,x[ireal,:] - mu_hat,lower))
+            dm_z.append(_maha(delta,v,x_s,z - mu_hat,lower))
+        dm_x = np.array(dm_x)
+        dm_z = np.array(dm_z)
+        mu_x = np.median(dm_x)
+        mu_z = np.median(dm_z)
+        mad = np.median(np.abs(dm_x - mu_x))
+        sigma_x = 1.4826 * mad
+        z_score = (mu_z - mu_x) / sigma_x
+        z_scores[group] = z_score
+        dm_xs[group] = dm_x
+        dm_x.sort()
+
+        p = np.argmin(np.abs(dm_x - mu_z))/dm_x.shape[0]
+        p_vals[group] = 1 - p
+
+    z_scores, p_vals, dm_xs = pd.Series(z_scores), pd.Series(p_vals), pd.DataFrame(dm_xs)
+    # dm_xs.loc[:,"z_scores"] = z_scores.loc[dm_xs.index]
+    # dm_xs.loc[:,"p_vals"] = p_vals.loc[dm_xs.index]
+    df = pd.DataFrame({"z_scores":z_scores,"p_vals":p_vals})
+    df.index.name = "obgnme"
+    return df,pd.DataFrame(dm_xs)
+
+def _maha(delta,v,x,z,lower_inv):
+
+    d_m = np.dot(z.transpose(),z)
+    first = np.dot(np.dot(lower_inv,x),z)
+    first = np.dot(first.transpose(),first)
+    d_m = (1.0/(delta * v)) * (d_m - first)
+    return d_m
+
+
 def get_maha_obs_summary(sim_en, l1_crit_val=6.34, l2_crit_val=9.2):
     """calculate the 1-D and 2-D mahalanobis distance between simulated
     ensemble and observed values.  Used for detecting prior-data conflict
@@ -5990,7 +6312,8 @@ def get_maha_obs_summary(sim_en, l1_crit_val=6.34, l2_crit_val=9.2):
         cov.update(cd)
     print("starting L-2 maha distance parallel calcs")
     # pool = mp.Pool(processes=5)
-    with mp.get_context("spawn").Pool() as pool:
+    with mp.get_context("spawn").Pool(
+            processes=min(mp.cpu_count(), 60)) as pool:
         for i1, o1 in enumerate(nz_names):
             o2names = [o2 for o2 in nz_names[i1 + 1 :]]
             rresults = [
@@ -6044,3 +6367,61 @@ def _l2_maha_worker(o1, o2names, mean, var, cov, results, l2_crit_val):
             rresults[ostr] = l2_maha_sq_val
     results.update(rresults)
     print(o1, "done")
+
+
+def parse_rmr_file(rmr_file):
+    """parse a run management record file into a data frame of tokens
+
+    Args:
+        rmr_file (`str`):  an rmr file name
+
+    Returns:
+        pd.DataFrame: a dataframe of timestamped information
+
+    Note:
+        only supports rmr files generated by pest++ version >= 5.1.21
+
+    """
+
+    if not os.path.exists(rmr_file):
+        raise FileExistsError("rmr file not found")
+    data = {}
+    dts = []
+    with open(rmr_file,'r') as f:
+        for line in f:
+            if "->" in line:
+                raw = line.split("->")
+                dt = datetime.strptime(raw[0],"%m/%d/%y %H:%M:%S")
+                tokens = raw[1].split()
+                colon_token = [ t for t in tokens if ":" in t]
+                if len(colon_token) > 0:
+                    idx = tokens.index(colon_token[0])
+                    action = "_".join(tokens[:idx+1])
+                else:
+                    action = '_'.join(tokens)
+                if "action" not in data:
+                    data["action"] = []
+                data["action"].append(action)
+
+                tokens = colon_token
+                tokens = {t.split(":")[0]:t.split(':')[1] for t in tokens}
+                for t in tokens:
+                    if t not in data:
+                        data[t] = [np.nan] * len(dts)
+                for k in data:
+                    if k == "action":
+                        continue
+                    if k not in tokens:
+                        data[k].append(np.nan)
+                    else:
+                        data[k].append(tokens[k])
+                dts.append(dt)
+
+    df = pd.DataFrame(data,index=dts)
+    return df
+
+
+
+
+
+
