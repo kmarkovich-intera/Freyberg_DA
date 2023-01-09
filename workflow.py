@@ -531,6 +531,7 @@ def setup_interface(org_ws, num_reals=10):
     shutil.copytree(org_ws, tmp_ws)
     #to make sure we get a consistent version of pyemu...
     shutil.copytree("pyemu",os.path.join(tmp_ws,"pyemu"))
+    shutil.copytree("flopy",os.path.join(tmp_ws,"flopy"))
     pyemu.os_utils.run("mf6", cwd=tmp_ws)
 
     # load the mf6 model with flopy to get the spatial reference
@@ -782,7 +783,7 @@ def setup_interface(org_ws, num_reals=10):
     strt_pars = par.loc[par.parnme.str.contains('|'.join(searchfor)), "parnme"]
 
     # set the first stress period to no pumping
-    first_wpar = "twel_mlt_0_inst:0_usecol:3"
+    first_wpar = "pname:twel_mlt_0_inst:0_ptype:cn_usecol:3_pstyle:m"
     assert first_wpar in set(pst.par_names)
     pf.pst.parameter_data.loc[first_wpar,"partrans"] = "fixed"
     pf.pst.parameter_data.loc[first_wpar, "parval1"] = 5.0e-10
@@ -795,7 +796,7 @@ def setup_interface(org_ws, num_reals=10):
     if "daily" in template_ws:
         m_lrc = (m_lrc[0],m_lrc[1]*3,m_lrc[2]*3)
     if new_wpar.shape[0] > 0:
-        new_wpar = "wel_grid_inst:0_usecol:3_idx0:{0}_idx1:{1}_idx2:{2}".format(m_lrc[0]-1,m_lrc[1]-1,m_lrc[2]-1)
+        new_wpar = "pname:wel_grid_inst:0_ptype:gr_usecol:3_pstyle:m_idx0:{0}_idx1:{1}_idx2:{2}".format(m_lrc[0]-1,m_lrc[1]-1,m_lrc[2]-1)
         assert new_wpar in set(pf.pst.par_names),new_wpar
     pf.pst.parameter_data.loc[new_wpar, "partrans"] = "fixed"
     pf.pst.parameter_data.loc[new_wpar, "parval1"] = 1.0
