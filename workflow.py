@@ -4013,13 +4013,11 @@ if __name__ == "__main__":
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
     b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
-
-    m_c_d = run_complex_prior_mc(c_d,num_workers=10)
-
+    
+    m_c_d = run_complex_prior_mc(c_d,num_workers=7)
+    exit()
     b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
-
+    
     compare_mf6_freyberg(num_workers=10, num_replicates=50,num_reals=50,use_sim_states=True,
                        run_ies=True,run_da=True,adj_init_states=True)
 
@@ -4028,8 +4026,7 @@ if __name__ == "__main__":
     add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
     reduce_simple_pars(b_d)
-    s_d = monthly_ies_to_da(b_d,include_est_states=False)
-
+    
     b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
 
