@@ -87,7 +87,7 @@ def clean_master_dirs():
 
 
 def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim_states=True,
-                         run_ies=True,run_da=True,adj_init_states=True,seq_noptmax=1):
+                         run_ies=True):
     complex_dir = os.path.join('daily_model_files_master_prior')
     bat_dir = os.path.join('monthly_model_files_template')
     seq_dir = "seq_" + bat_dir
@@ -131,47 +131,32 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
 
 
-        # run da          
-
-        if run_da:
-            da_t_d = map_simple_bat_to_seq(ies_t_d, seq_dir)
-
-            # prep that prior ensemble for da
-            da_pst = pyemu.Pst(os.path.join(da_t_d, "freyberg.pst"))
-
-            # set pestpp options for sequential da
-            da_pst.pestpp_options.pop("da_num_reals", None)
-            da_pst.pestpp_options.pop("ies_num_reals", None)
-            da_pst.pestpp_options["ies_no_noise"] = False
-            da_pst.pestpp_options["ies_verbose_level"] = 1
-            da_pst.pestpp_options.pop("ies_localizer", None)
-            da_pst.pestpp_options["ies_autoadaloc"] = False
-            da_pst.pestpp_options["ies_save_lambda_en"] = False
-            da_pst.pestpp_options["ies_drop_conflicts"] = False
-            da_pst.pestpp_options["ies_num_reals"] = num_reals
-            da_pst.pestpp_options["ies_use_mda"] = False
-            da_pst.pestpp_options["da_use_simulated_states"] = use_sim_states
-            if not adj_init_states:
-                par = da_pst.parameter_data
-                istate_pars = par.loc[par.parnme.str.startswith("direct_head"),"parnme"]
-                par.loc[istate_pars,"partrans"] = "fixed"
-            da_pst.control_data.noptmax = seq_noptmax
-            da_pst.write(os.path.join(da_t_d, "freyberg.pst"), version=2)
-
-            m_da_dir = da_t_d.replace("template", "master")
-            pyemu.os_utils.start_workers(da_t_d, 'pestpp-da', "freyberg.pst", port=port,
-                                         num_workers=num_workers, master_dir=m_da_dir, verbose=True)
-
-            shutil.rmtree(da_t_d)
-
         # run ies
         m_ies_dir = ies_t_d.replace("template","master")
 
         if run_ies:
             pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
                                       num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
+        #setup dsi pst
+        dsi_t_d = ies_t_d + "_dsi"
+        # optional: do we run a larger prior mc for dsi?  maybe equal to the number of runs ies used?
+        # copy ies_t_d to dsi_t_d
+        if os.path.exists(dsi_t_d):
+            shutil.rmtree(dsi_t_d)
+        shutil.copytree(ies_t_d,dsi_t_d)
+        obs_en = "freyberg.0.obs.csv"
+        shutil.copy2(os.path.join(m_ies_dir,obs_en),os.path.join(dsi_t_d,obs_en))
+        pst = pyemu.Pst(os.path.join(dsi_t_d,"freyberg.pst"))
+        ends = pyemu.EnDS(pst=pst,sim_ensemble=os.path.join(dsi_t_d,obs_en))
+        dsi_pst = ends.prep_for_dsi(t_d=dsi_t_d)
+        dsi_pst.control_data.noptmax = 3
+        dsi_pst.write(os.path.join(dsi_t_d,"freyberg.pst"))
+        m_dsi_dir = dsi_t_d.replace("template","master")
+        pyemu.os_utils.start_workers(dsi_t_d, 'pestpp-ies', "freyberg.pst", port=port,
+                                      num_workers=num_workers, master_dir=m_dsi_dir, verbose=True)
 
         shutil.rmtree(ies_t_d)
+        shutil.rmtree(dsi_t_d)
 
 
 
