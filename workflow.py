@@ -2595,78 +2595,58 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
     # first rip thru all the dirs and load...
     s_b_dict = {}
-    s_s_dict = {}
-    s_s_est_dict = {}
+    s_d_dict = {}
     print("loading results...")
 
     for ireal in range(50):
         s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
-        s_s_m_d = os.path.join(subdir,"seq_monthly_model_files_master_{0}".format(ireal))
+        s_d_m_d = os.path.join(subdir,"monthly_model_files_master_{0}_dsi".format(ireal))
 
-        if not os.path.exists(s_s_m_d) or not os.path.exists(s_s_m_d):
+        if not os.path.exists(s_b_m_d) or not os.path.exists(s_d_m_d):
             break
         try:
             s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
             obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names,:]
             obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
-            if obs.obsval.max() > 8000:
-                continue
+            #if obs.obsval.max() > 8000:
+            #    continue
 
             s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-            log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
-            s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+            #log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+            #s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
 
             bpost_iter = s_b_pst.control_data.noptmax
             if post_iter is not None:
                 bpost_iter = post_iter
             s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
                                     index_col=0)
-            log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
-            s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
+            #log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+            #s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
 
 
-            s_s_pst = pyemu.Pst(os.path.join(s_s_m_d, "freyberg.pst"))
-            seq_oe_files_pr = [f for f in os.listdir(s_s_m_d) if f.endswith("0.obs.csv") and f.startswith("freyberg")]
-            spost_iter = s_s_pst.control_data.noptmax
+            s_d_pst = pyemu.Pst(os.path.join(s_d_m_d, "freyberg.pst"))
+            obs = s_b_pst.observation_data.loc[s_d_pst.nnz_obs_names, :]
+            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+            if obs.obsval.max() > 8000:
+                continue
+
+            s_d_oe_pr = pd.read_csv(os.path.join(s_d_m_d, "freyberg.0.obs.csv"), index_col=0)
+            #log_cols = s_d_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+            #s_d_oe_pr.loc[:, log_cols] = s_d_oe_pr.loc[:, log_cols].apply(np.log10)
+
+            bpost_iter = s_d_pst.control_data.noptmax
             if post_iter is not None:
-                spost_iter = post_iter
-            seq_oe_files_pt = [f for f in os.listdir(s_s_m_d) if
-                               f.endswith("{0}.obs.csv".format(spost_iter)) and f.startswith(
-                                   "freyberg")]
-
-            s_s_oe_dict_pr = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                              seq_oe_files_pr}
-            s_s_oe_dict_pt = {int(f.split(".")[1]): pd.read_csv(os.path.join(s_s_m_d, f), index_col=0) for f in
-                              seq_oe_files_pt}
-
-            for key,df in s_s_oe_dict_pr.items():
-                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
-
-
-                df.loc[:,log_cols] = df.loc[:,log_cols].apply(np.log10)
-                df = df.replace(-np.Inf, np.nan)
-                s_s_oe_dict_pr[key] = df
-
-            for key, df in s_s_oe_dict_pt.items():
-                log_cols = df.columns.map(lambda x: "mass" in x or "cnc" in x)
-                df.loc[:, log_cols] = df.loc[:, log_cols].apply(np.log10)
-                df = df.replace(-np.Inf, np.nan)
-                s_s_oe_dict_pt[key] = df
-
-            s_b_dict[ireal] = [s_b_pst,s_b_oe_pr,s_b_oe_pt]
-            s_s_dict[ireal] = [s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt]
-
-            if include_est_states:
-                # key these one cycle ahead since the posterior est states for this cycle are equiv to the prior sim states
-                # of next cycle
-                s_s_pe_dict_pt = {int(f.split(".")[1]) + 1: pd.read_csv(os.path.join(s_s_m_d, f.replace(".obs.",".par.")),
-                                                                    index_col=0) for f in seq_oe_files_pt}
-                s_s_est_dict[ireal] = s_s_pe_dict_pt
+                bpost_iter = post_iter
+            s_d_oe_pt = pd.read_csv(os.path.join(s_d_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                    index_col=0)
+            #log_cols = s_d_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+            #s_b_oe_pt.loc[:, log_cols] = s_d_oe_pt.loc[:, log_cols].apply(np.log10)
+            s_b_dict[ireal] = [s_b_pst, s_b_oe_pr, s_b_oe_pt]
+            s_d_dict[ireal] = [s_d_pst, s_d_oe_pr, s_d_oe_pt]
             print(ireal)
         except:
             break
 
-    obs = s_s_pst.observation_data
     #sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
     #par = s_s_pst.parameter_data
     #sfpar = par.loc[pd.notna(par.state_par_link),:]
@@ -2676,7 +2656,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
     if len(s_b_dict) == 0:
         raise Exception()
 
-    ireals = list(s_s_dict.keys())
+    ireals = list(s_b_dict.keys())
     ireals.sort()
     sbobs_org = s_b_pst.observation_data
     print("plotting")
@@ -2709,7 +2689,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                                                                     label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
-                "{0}) sequential {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+                "{0}) DSI {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
             ax_count += 1
             for itime,oname in enumerate(sgobs.obsnme):
                 if itime < 1 or itime > 12:
@@ -2720,8 +2700,6 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                     s_b_pst,s_b_oe_pr,s_b_oe_pt = s_b_dict[ireal]
                     sbobs = s_b_pst.observation_data
                     sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
-
-                    s_s_pst,s_s_oe_dict_pr,s_s_oe_dict_pt = s_s_dict[ireal]
 
                     cval = sgobs.loc[oname,"obsval"].copy()
                     if "conc" in oname:
@@ -2735,26 +2713,9 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                     print(ireal,oname,cval)
 
                     if summarize:
-                        mn = s_b_oe_pr.loc[:, oname].mean()
-                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
-                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
-                        #axes[0, 0].scatter(mn, cval,
-                        #                   marker="o", color="0.5", alpha=0.5,s=size)
-                        #axes[0, 0].plot([lq,uq], [cval,cval],
-                        #                   color="0.5", alpha=0.5,lw=lw)
-
-                        #axesall_keep[ikeep, 0].scatter(mn, cval,
-                        #                   marker="o", color="0.5", alpha=0.5,s=size)
-                        #axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
-                        #                color="0.5", alpha=0.5, lw=lw)
-
                         mn = s_b_oe_pt.loc[:, oname].mean()
                         lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
                         uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
-                        #axes[1, 0].scatter(mn, cval,
-                        #                   marker="o", color="b", alpha=0.5,s=size)
-                        #axes[1, 0].plot([lq, uq], [cval, cval],
-                        #                color="b", alpha=0.5, lw=lw)
 
                         axesall_keep[ikeep, 0].scatter(mn, cval,
                                               marker="o", color="b", alpha=0.5,s=size,zorder=10)
@@ -2763,86 +2724,29 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
 
                     else:
-                        #axes[0,0].scatter(s_b_oe_pr.loc[:, oname],[cval for _ in range(s_b_oe_pr.shape[0])],marker="o",color="0.5",alpha=0.5,s=size)
-                        #axes[1,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o", color="b",
-                        #           alpha=0.5,s=size)
                         axesall_keep[ikeep,0].scatter(s_b_oe_pr.loc[:, oname], [cval for _ in range(s_b_oe_pr.shape[0])], marker="o",
                                    color="0.5", alpha=0.5,s=size)
                         axesall_keep[ikeep,0].scatter(s_b_oe_pt.loc[:, oname], [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
                                    color="b",alpha=0.5,s=size,zorder=10)
 
-                    seq_name = k0ogname
-                    if "arrobs" not in k0ogname:
-                        seq_name = k0ogname + "_time:10000.0"
 
-                    if itime in s_s_oe_dict_pr:
-                        oe = s_s_oe_dict_pr[itime]
-                        if summarize:
-                            mn = oe.loc[:, seq_name].dropna().mean()
-                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-                            if itime == 3:
-                                if ~np.isfinite(mn):
-                                    print("seq",itime,seq_name,cval,mn,lq,uq)
-                            #axes[0, 1].scatter(mn, cval,
-                            #                   marker="o", color="0.5", alpha=0.5,s=size)
-                            #axes[0, 1].plot([lq, uq], [cval, cval],
-                            #                color="0.5", alpha=0.5, lw=lw)
+                    s_d_pst, s_d_oe_pr, s_d_oe_pt = s_d_dict[ireal]
+                    if summarize:
+                        mn = s_d_oe_pt.loc[:, oname].mean()
+                        lq = s_d_oe_pt.loc[:, oname].quantile(0.05)
+                        uq = s_d_oe_pt.loc[:, oname].quantile(0.95)
 
-                            #axesall_keep[ikeep, 1].scatter(mn, cval,
-                            #                      marker="o", color="0.5", alpha=0.5,s=size)
-                            #axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                            #                   color="0.5", alpha=0.5, lw=lw)
-
-                        else:
-                            #axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                            #           alpha=0.5,s=size)
-                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                                       alpha=0.5,s=size)
+                        axesall_keep[ikeep, 1].scatter(mn, cval,
+                                              marker="o", color="b", alpha=0.5,s=size,zorder=10)
+                        axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                           color="b", alpha=0.5, lw=lw,zorder=10)
 
 
-                    if itime in s_s_oe_dict_pt:
-                        oe = s_s_oe_dict_pt[itime]
-                        if summarize:
-                            mn = oe.loc[:, seq_name].dropna().mean()
-                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-                            #axes[1, 1].scatter(mn, cval,
-                            #                   marker="o", color="b", alpha=0.5,s=size)
-                            #axes[1, 1].plot([lq, uq], [cval, cval],
-                            #                color="b", alpha=0.5, lw=lw)
-
-                            axesall_keep[ikeep, 1].scatter(mn, cval,
-                                                  marker="o", color="b", alpha=0.5,s=size)
-                            axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                                               color="b", alpha=0.5, lw=lw)
-                        else:
-
-                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="b",
-                                       alpha=0.5,s=size,zorder=10)
-                            axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="b",
-                                       alpha=0.5,s=size,zorder=10)
-                    # elif itime in s_s_oe_dict_pr:
-                    #     oe = s_s_oe_dict_pr[itime]
-                    #     if summarize:
-                    #         mn = oe.loc[:, seq_name].mean()
-                    #         lq = oe.loc[:, seq_name].quantile(0.05)
-                    #         uq = oe.loc[:, seq_name].quantile(0.95)
-                    #         #axes[1, 1].scatter(mn, cval,
-                    #         #                   marker="o", color="0.5", alpha=0.5,s=size)
-                    #         #axes[1, 1].plot([lq, uq], [cval, cval],
-                    #         #                color="0.5", alpha=0.5, lw=lw)
-                    #
-                    #         axesall_keep[ikeep, 1].scatter(mn, cval,
-                    #                               marker="o", color="0.5", alpha=0.5,s=size)
-                    #         axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                    #                            color="0.5", alpha=0.5, lw=lw)
-                    #     else:
-                    #
-                    #         #axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                    #         #          alpha=0.5,s=size)
-                    #         axesall_keep[ikeep,1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                    #                    alpha=0.5,s=size)
+                    else:
+                        axesall_keep[ikeep,1].scatter(s_d_oe_pr.loc[:, oname], [cval for _ in range(s_d_oe_pr.shape[0])], marker="o",
+                                   color="0.5", alpha=0.5,s=size)
+                        axesall_keep[ikeep,1].scatter(s_d_oe_pt.loc[:, oname], [cval for _ in range(s_d_oe_pt.shape[0])], marker="o",
+                                   color="b",alpha=0.5,s=size,zorder=10)
 
 
             mn = min(axesall_keep[ikeep,0].get_xlim()[0],axesall_keep[ikeep,0].get_ylim()[0],
@@ -2852,17 +2756,16 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             axesall_keep[ikeep,0].plot([mn,mx],[mn,mx],"k--")
             axesall_keep[ikeep, 1].plot([mn, mx], [mn, mx], "k--")
 
-            axesall_keep[ikeep, 0].set_xlim(mn, mx)
-            axesall_keep[ikeep, 0].set_ylim(mn, mx)
-            axesall_keep[ikeep, 1].set_xlim(mn, mx)
-            axesall_keep[ikeep, 1].set_ylim(mn, mx)
+            # axesall_keep[ikeep, 0].set_xlim(mn, mx)
+            # axesall_keep[ikeep, 0].set_ylim(mn, mx)
+            # axesall_keep[ikeep, 1].set_xlim(mn, mx)
+            # axesall_keep[ikeep, 1].set_ylim(mn, mx)
             axesall_keep[ikeep,0].set_aspect("equal")
             axesall_keep[ikeep,0].set_ylabel("complex")
             axesall_keep[ikeep,0].set_xlabel("simple")
             axesall_keep[ikeep, 1].set_aspect("equal")
             axesall_keep[ikeep, 1].set_ylabel("complex")
             axesall_keep[ikeep, 1].set_xlabel("simple")
-
 
         plt.tight_layout()
         pdf.savefig(figall_keep)
@@ -2885,7 +2788,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                 "{0}) batch {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
-                "{0}) sequential {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+                "{0}) DSI {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
             ax_count += 1
             for itime, oname in enumerate(sgobs.obsnme):
                 if itime < 12 or itime > 16:
@@ -2896,8 +2799,6 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                     sbobs = s_b_pst.observation_data
                     sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
 
-                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
-
                     cval = sgobs.loc[oname, "obsval"].copy()
                     if "conc" in oname:
                         if np.abs(cval) > 1.0e+10:
@@ -2907,30 +2808,15 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                         if ~np.isfinite(cval):
                             continue
                     weight = sgobs.loc[oname, "weight"]
-                    print(ireal, oname, cval)
+                    #print(ireal, oname, cval)
 
                     if summarize:
-                        mn = s_b_oe_pr.loc[:, oname].mean()
-                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
-                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
-                        # axes[0, 0].scatter(mn, cval,
-                        #                   marker="o", color="0.5", alpha=0.5,s=size)
-                        # axes[0, 0].plot([lq,uq], [cval,cval],
-                        #                   color="0.5", alpha=0.5,lw=lw)
-
-                        # axesall_keep[ikeep, 0].scatter(mn, cval,
-                        #                   marker="o", color="0.5", alpha=0.5,s=size)
-                        # axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
-                        #                color="0.5", alpha=0.5, lw=lw)
 
                         mn = s_b_oe_pt.loc[:, oname].mean()
                         lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
                         uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
-                        # axes[1, 0].scatter(mn, cval,
-                        #                   marker="o", color="b", alpha=0.5,s=size)
-                        # axes[1, 0].plot([lq, uq], [cval, cval],
-                        #                color="b", alpha=0.5, lw=lw)
 
+                        print(oname,mn,cval)
                         axesall_keep[ikeep, 0].scatter(mn, cval,
                                                        marker="o", color="b", alpha=0.5, s=size, zorder=10)
                         axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
@@ -2948,77 +2834,26 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                                                        [cval for _ in range(s_b_oe_pt.shape[0])], marker="o",
                                                        color="b", alpha=0.5, s=size, zorder=10)
 
-                    seq_name = k0ogname
-                    if "arrobs" not in k0ogname:
-                        seq_name = k0ogname + "_time:10000.0"
+                    s_d_pst, s_d_oe_pr, s_d_oe_pt = s_d_dict[ireal]
+                    if summarize:
 
-                    if itime in s_s_oe_dict_pr:
-                        oe = s_s_oe_dict_pr[itime]
-                        if summarize:
-                            mn = oe.loc[:, seq_name].dropna().mean()
-                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-                            if itime == 3:
-                                if ~np.isfinite(mn):
-                                    print("seq", itime, seq_name, cval, mn, lq, uq)
+                        mn = s_d_oe_pt.loc[:, oname].mean()
+                        lq = s_d_oe_pt.loc[:, oname].quantile(0.05)
+                        uq = s_d_oe_pt.loc[:, oname].quantile(0.95)
+                        axesall_keep[ikeep, 1].scatter(mn, cval,
+                                                       marker="o", color="b", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                                    color="b", alpha=0.5, lw=lw, zorder=10)
 
-                            axesall_keep[ikeep, 1].scatter(mn, cval,
-                                                  marker="o", color="0.5", alpha=0.5,s=size)
-                            axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                                               color="0.5", alpha=0.5, lw=lw)
 
-                        else:
-                            # axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                            #           alpha=0.5,s=size)
-                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                                                           marker="o", color="0.5",
-                                                           alpha=0.5, s=size)
+                    else:
+                        axesall_keep[ikeep, 1].scatter(s_d_oe_pr.loc[:, oname],
+                                                       [cval for _ in range(s_d_oe_pr.shape[0])], marker="o",
+                                                       color="0.5", alpha=0.5, s=size)
+                        axesall_keep[ikeep, 1].scatter(s_d_oe_pt.loc[:, oname],
+                                                       [cval for _ in range(s_d_oe_pt.shape[0])], marker="o",
+                                                       color="b", alpha=0.5, s=size, zorder=10)
 
-                    if itime in s_s_oe_dict_pt:
-                        oe = s_s_oe_dict_pt[itime]
-                        if summarize:
-                            mn = oe.loc[:, seq_name].dropna().mean()
-                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-                            # axes[1, 1].scatter(mn, cval,
-                            #                   marker="o", color="b", alpha=0.5,s=size)
-                            # axes[1, 1].plot([lq, uq], [cval, cval],
-                            #                color="b", alpha=0.5, lw=lw)
-
-                            #axesall_keep[ikeep, 1].scatter(mn, cval,
-                            #                               marker="o", color="b", alpha=0.5, s=size)
-                            #axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                            #                            color="b", alpha=0.5, lw=lw)
-                        else:
-
-                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                                                        marker="o", color="b",
-                                                        alpha=0.5, s=size, zorder=10)
-                            axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                                                           marker="o", color="b",
-                                                           alpha=0.5, s=size, zorder=10)
-                    # elif itime in s_s_oe_dict_pr:
-                    #     oe = s_s_oe_dict_pr[itime]
-                    #     if summarize:
-                    #         mn = oe.loc[:, seq_name].mean()
-                    #         lq = oe.loc[:, seq_name].quantile(0.05)
-                    #         uq = oe.loc[:, seq_name].quantile(0.95)
-                    #         # axes[1, 1].scatter(mn, cval,
-                    #         #                   marker="o", color="0.5", alpha=0.5,s=size)
-                    #         # axes[1, 1].plot([lq, uq], [cval, cval],
-                    #         #                color="0.5", alpha=0.5, lw=lw)
-                    #
-                    #         axesall_keep[ikeep, 1].scatter(mn, cval,
-                    #                                        marker="o", color="0.5", alpha=0.5, s=size)
-                    #         axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
-                    #                                     color="0.5", alpha=0.5, lw=lw)
-                    #     else:
-                    #
-                    #         # axes[1,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                    #         #          alpha=0.5,s=size)
-                    #         axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                    #                                        marker="o", color="0.5",
-                    #                                        alpha=0.5, s=size)
 
             mn = min(axesall_keep[ikeep, 0].get_xlim()[0], axesall_keep[ikeep, 0].get_ylim()[0],
                      axesall_keep[ikeep, 1].get_xlim()[0], axesall_keep[ikeep, 1].get_ylim()[0])
@@ -3027,10 +2862,10 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             axesall_keep[ikeep, 0].plot([mn, mx], [mn, mx], "k--")
             axesall_keep[ikeep, 1].plot([mn, mx], [mn, mx], "k--")
             #print(ogname,mn,mx)
-            axesall_keep[ikeep, 0].set_xlim(mn, mx)
-            axesall_keep[ikeep, 0].set_ylim(mn, mx)
-            axesall_keep[ikeep, 1].set_xlim(mn, mx)
-            axesall_keep[ikeep, 1].set_ylim(mn, mx)
+            # axesall_keep[ikeep, 0].set_xlim(mn, mx)
+            # axesall_keep[ikeep, 0].set_ylim(mn, mx)
+            # axesall_keep[ikeep, 1].set_xlim(mn, mx)
+            # axesall_keep[ikeep, 1].set_ylim(mn, mx)
             axesall_keep[ikeep, 0].set_aspect("equal")
             axesall_keep[ikeep, 0].set_ylabel("complex")
             axesall_keep[ikeep, 0].set_xlabel("simple")
@@ -3041,129 +2876,6 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
         plt.tight_layout()
         pdf.savefig(figall_keep)
         plt.close(figall_keep)
-
-        cycles = np.arange(12,16,dtype=int)
-        norm = mpl.colors.Normalize(vmin=0,vmax=len(cycles))
-        cmap = plt.get_cmap("jet")
-        figall_keep, axesall_keep = plt.subplots(1, 2, figsize=(8, 4))
-        ax_count = 0
-        for ikeep, ogname in enumerate(forecast[1:]):
-            # if "mass" not in ogname:
-            #    continue
-            k0ogname = ogname
-            if is_1_lay:
-                k0ogname = ogname.replace("k:2", "k:0")
-            sgobs = sbobs_org.loc[sbobs_org.obsnme.str.contains(k0ogname), :].copy()
-            sgobs = sgobs.loc[sgobs.obsnme.str.contains("_time"), :]
-            sgobs.loc[:, "time"] = sgobs.time.apply(float)
-            # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
-            sgobs.sort_values(by="time", inplace=True)
-            axesall_keep[ikeep].set_title(
-                "{0}) {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname].replace("\n"," ")),loc="left")
-            ax_count += 1
-            axesall_keep[ikeep].set_title(
-                "{0}) {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname].replace("\n"," ")),loc="left")
-            ax_count += 1
-            iitime = 0
-            for itime, oname in enumerate(sgobs.obsnme):
-                if itime not in cycles:
-                    continue
-                color = cmap(norm(iitime))
-                iitime += 1
-                print(itime,oname)
-                for ireal in ireals:
-                    s_b_pst, s_b_oe_pr, s_b_oe_pt = s_b_dict[ireal]
-                    sbobs = s_b_pst.observation_data
-                    sgobs = sbobs.loc[sbobs.obsnme.str.contains(k0ogname), :].copy()
-
-                    s_s_pst, s_s_oe_dict_pr, s_s_oe_dict_pt = s_s_dict[ireal]
-
-                    cval = sgobs.loc[oname, "obsval"].copy()
-                    if "conc" in oname:
-                        if np.abs(cval) > 1.0e+10:
-                            continue
-                    if "mass" in oname or "cnc" in oname:
-                        cval = np.log10(cval)
-                        if ~np.isfinite(cval):
-                            continue
-
-                    seq_name = k0ogname
-                    if "arrobs" not in k0ogname:
-                        seq_name = k0ogname + "_time:10000.0"
-
-                    if itime in s_s_oe_dict_pr:
-                        oe = s_s_oe_dict_pr[itime]
-                        print(itime,ogname,color)
-                        if summarize:
-                            mn = oe.loc[:, seq_name].dropna().mean()
-                            lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                            uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-
-                            axesall_keep[ikeep].scatter(mn, cval,
-                                                  marker="o", color=color, alpha=0.5,s=size)
-                            axesall_keep[ikeep].plot([lq, uq], [cval, cval],
-                                               color=color, alpha=0.5, lw=lw)
-
-                        #else:
-                            # axes[0,1].scatter(oe.loc[:, seq_name],[cval for _ in range(oe.shape[0])], marker="o", color="0.5",
-                            #           alpha=0.5,s=size)
-                            #axesall_keep[ikeep, 1].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                            #                               marker="o", color=color,
-                            #                               alpha=0.5, s=size)
-
-                    # if int(itime) in s_s_oe_dict_pt:
-                    #     oe = s_s_oe_dict_pt[itime]
-                    #     print(ogname,itime, color)
-                    #     if summarize:
-                    #         mn = oe.loc[:, seq_name].dropna().mean()
-                    #         lq = oe.loc[:, seq_name].dropna().quantile(0.05)
-                    #         uq = oe.loc[:, seq_name].dropna().quantile(0.95)
-                    #         # axes[1, 1].scatter(mn, cval,
-                    #         #                   marker="o", color="b", alpha=0.5,s=size)
-                    #         # axes[1, 1].plot([lq, uq], [cval, cval],
-                    #         #                color="b", alpha=0.5, lw=lw)
-                    #
-                    #         axesall_keep[ikeep].scatter(mn, cval,
-                    #                                       marker="o", color=color, alpha=0.5, s=size)
-                    #         axesall_keep[ikeep].plot([lq, uq], [cval, cval],
-                    #                                    color=color, alpha=0.5, lw=lw)
-                    #     else:
-                    #
-                    #         axesall_keep[ikeep].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                    #                                     marker="o", color=color,
-                    #                                     alpha=0.5, s=size, zorder=10)
-                    #         axesall_keep[ikeep].scatter(oe.loc[:, seq_name], [cval for _ in range(oe.shape[0])],
-                    #                                        marker="o", color=color,
-                    #                                        alpha=0.5, s=size, zorder=10)
-
-
-
-            ax = axesall_keep[ikeep]
-            mn = min(ax.get_xlim()[0], ax.get_ylim()[0])
-            mx = max(ax.get_xlim()[1], ax.get_ylim()[1])
-            ax.plot([mn, mx], [mn, mx], "k--")
-
-            ax.set_xlim(mn, mx)
-            ax.set_ylim(mn, mx)
-
-            axesall_keep[ikeep].set_aspect("equal")
-            axesall_keep[ikeep].set_ylabel("complex")
-            axesall_keep[ikeep].set_xlabel("simple")
-            #axesall_keep[ikeep, 1].set_aspect("equal")
-            #axesall_keep[ikeep, 1].set_ylabel("complex")
-            #axesall_keep[ikeep, 1].set_xlabel("simple")
-
-        plt.tight_layout()
-        pdf.savefig(figall_keep)
-        plt.close(figall_keep)
-
-
-
-
-
-
-
-
 
 
 def plot_s_vs_s_pub_2(summarize=False, subdir=".", post_iter=None):
@@ -3537,7 +3249,7 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
             pr = mpatches.Patch(color='grey', label='Prior Realization Simulated Quantity')
             pt = mpatches.Patch(color='blue', label='Posterior Realization Simulated Quantity')
             ax.legend(handles=[obs, pr, pt])
-            [ax.plot(dgobs.time, s_d_oe_pr.loc[idx, sdobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in
+            [ax.plot(dgobs.time, s_d_oe_pr.loc[idx, sgobs.obsnme], "0.5", lw=0.01, alpha=0.5) for idx in
              s_d_oe_pr.index]
             [ax.plot(dgobs.time, s_d_oe_pt.loc[idx, dgobs.obsnme], "b", lw=0.01, alpha=0.5) for idx in
              s_d_oe_pt.index]
@@ -3576,29 +3288,14 @@ if __name__ == "__main__":
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    compare_mf6_freyberg(num_workers=10, num_replicates=3,num_reals=100,
-                       run_ies=True)
-    exit()
-    #fixed well scenario
-    sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    reduce_simple_pars(b_d)
-    
-    b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
-    s_d = map_simple_bat_to_seq(b_d,"seq_monthly_model_files_template")
+    #compare_mf6_freyberg(num_workers=10, num_replicates=3,num_reals=100,
+    #                   run_ies=True)
+    #exit()
 
-    compare_mf6_freyberg(num_workers=10, num_replicates=50,num_reals=50,use_sim_states=True,
-                       run_ies=True,run_da=True,adj_init_states=True)
-
-    exit()
-    # plotting
-    plot_domain()
-    plot_obs_v_sim_pub(subdir="missing_wel_pars")
-    plot_obs_v_sim3(subdir="missing_wel_pars")
-    plot_s_vs_s_pub_2(summarize=True)
-    plot_s_vs_s_pub_2(summarize=True,subdir="missing_wel_pars")
-
+    #plot_domain()
+    #plot_obs_v_sim_pub(subdir="missing_wel_pars")
+    plot_s_vs_s_pub(summarize=True)
+    #plot_obs_v_sim3()
     exit()
 
     #other fxns
@@ -3609,5 +3306,5 @@ if __name__ == "__main__":
     #invest()
     #clean_results("naive_50reals_eststates")
     #make_prop_histograms()
-    #plot_s_vs_s_pub(summarize=True)
+
     #plot_s_vs_s(summarize=True)#,subdir="missing_wel_pars")
