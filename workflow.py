@@ -135,8 +135,8 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         m_ies_dir = ies_t_d.replace("template","master")
 
         if run_ies:
-            pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
-                                      num_workers=num_workers, master_dir=m_ies_dir, verbose=True)
+           pyemu.os_utils.start_workers(ies_t_d, 'pestpp-ies', "freyberg.pst", port=port,
+                                     num_workers=num_workers, master_dir=m_ies_dir, verbose=True,worker_root=".")
         #setup dsi pst
         dsi_t_d = ies_t_d + "_dsi"
         # optional: do we run a larger prior mc for dsi?  maybe equal to the number of runs ies used?
@@ -147,14 +147,21 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         obs_en = "freyberg.0.obs.csv"
         shutil.copy2(os.path.join(m_ies_dir,obs_en),os.path.join(dsi_t_d,obs_en))
         pst = pyemu.Pst(os.path.join(dsi_t_d,"freyberg.pst"))
-        ends = pyemu.EnDS(pst=pst,sim_ensemble=os.path.join(dsi_t_d,obs_en))
+        obs = pst.observation_data
+        forecast_names = []
+        for fore in forecast:
+            fobs = obs.loc[obs.obsnme.str.contains(fore),"obsnme"].to_list()
+            forecast_names.extend(fobs)
+        obs_en = pyemu.ObservationEnsemble.from_csv(pst=pst,filename=os.path.join(dsi_t_d,obs_en))
+        ends = pyemu.EnDS(pst=pst,sim_ensemble=obs_en,predictions=forecast_names)
         dsi_pst = ends.prep_for_dsi(t_d=dsi_t_d)
         dsi_pst.control_data.noptmax = 3
         dsi_pst.write(os.path.join(dsi_t_d,"freyberg.pst"))
+        prep_deps(dsi_t_d)
         m_dsi_dir = dsi_t_d.replace("template","master")
         pyemu.os_utils.start_workers(dsi_t_d, 'pestpp-ies', "freyberg.pst", port=port,
-                                      num_workers=num_workers, master_dir=m_dsi_dir, verbose=True)
-
+                                      num_workers=num_workers, master_dir=m_dsi_dir, verbose=True,worker_root=".")
+        exit()
         shutil.rmtree(ies_t_d)
         shutil.rmtree(dsi_t_d)
 
@@ -515,8 +522,9 @@ def setup_interface(org_ws, num_reals=10):
         shutil.rmtree(tmp_ws)
     shutil.copytree(org_ws, tmp_ws)
     #to make sure we get a consistent version of pyemu...
-    shutil.copytree("pyemu",os.path.join(tmp_ws,"pyemu"))
-    shutil.copytree("flopy",os.path.join(tmp_ws,"flopy"))
+    #shutil.copytree("pyemu",os.path.join(tmp_ws,"pyemu"))
+    #shutil.copytree("flopy",os.path.join(tmp_ws,"flopy"))
+    prep_deps(tmp_ws)
     pyemu.os_utils.run("mf6", cwd=tmp_ws)
 
     # load the mf6 model with flopy to get the spatial reference
@@ -2073,6 +2081,8 @@ def sync_phase(s_d = "monthly_model_files_org"):
     if os.path.exists(t_s_d):
         shutil.rmtree(t_s_d)
     shutil.copytree(s_d, t_s_d)
+    prep_deps(t_s_d)
+    prep_deps((t_c_d))
 
     for d in [t_c_d,t_s_d]:
         rch_file_list = [f for f in os.listdir(d) if "rch_recharge" in f]
@@ -2168,6 +2178,19 @@ def sync_phase(s_d = "monthly_model_files_org"):
     return t_c_d,t_s_d
 
 
+def prep_deps(d):
+    dest = os.path.join(d,"flopy")
+    if not os.path.exists(dest):
+        shutil.copytree("flopy",os.path.join(d,"flopy"))
+    dest = os.path.join(d, "pyemu")
+    if not os.path.exists(dest):
+        shutil.copytree("pyemu",os.path.join(d,"pyemu"))
+    files = os.listdir(bin_path)
+    for f in files:
+        shutil.copy2(os.path.join(bin_path,f),os.path.join(d,f))
+
+
+
 def clean_results(subdir="."):
     clean_dir = os.path.join(subdir,"clean")
     if os.path.exists(clean_dir):
@@ -2237,6 +2260,7 @@ def add_new_stress(m_d_org = "monthly_model_files"):
             if "maxbound" in line.lower():
                 line = "   maxbound  7\n"
             f.write(line)
+    prep_deps(d_d_new)
     pyemu.os_utils.run("mf6",cwd=d_d_new)
 
 
@@ -2246,6 +2270,8 @@ def add_new_stress(m_d_org = "monthly_model_files"):
     if os.path.exists(m_d_new):
         shutil.rmtree(m_d_new)
     shutil.copytree(m_d_org,m_d_new)
+    prep_deps(m_d_new)
+
 
     wel_files = [f for f in os.listdir(m_d_new) if ".wel_stress_period" in f and f.endswith(".txt")]
     for wel_file in wel_files:
@@ -3999,13 +4025,13 @@ if __name__ == "__main__":
     #add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
     #c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
     #b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
-    
+
     #m_c_d = run_complex_prior_mc(c_d,num_workers=7)
     #exit()
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    compare_mf6_freyberg(num_workers=10, num_replicates=10,num_reals=100,
+    compare_mf6_freyberg(num_workers=10, num_replicates=3,num_reals=100,
                        run_ies=True)
     exit()
     #fixed well scenario
@@ -4020,7 +4046,7 @@ if __name__ == "__main__":
     compare_mf6_freyberg(num_workers=10, num_replicates=50,num_reals=50,use_sim_states=True,
                        run_ies=True,run_da=True,adj_init_states=True)
 
-
+    exit()
     # plotting
     plot_domain()
     plot_obs_v_sim_pub(subdir="missing_wel_pars")
