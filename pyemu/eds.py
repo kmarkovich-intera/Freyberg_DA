@@ -520,6 +520,10 @@ class EnDS(object):
 
         self.logger.log("pseudo inv of deviations matrix")
         deltad = Matrix.from_dataframe(oe).T
+        print(deltad.shape)
+        print(deltad.s)
+        print(self.pst.svd_data.maxsing,eigthresh=self.pst.svd_data.eigthresh)
+        exit()
         U,S,V = deltad.pseudo_inv_components(maxsing=self.pst.svd_data.maxsing,eigthresh=self.pst.svd_data.eigthresh)
         self.logger.log("pseudo inv of deviations matrix")
 
@@ -576,7 +580,7 @@ class EnDS(object):
             pvals = pd.read_csv("dsi_pars.csv",index_col=0)
             ovals = pd.read_csv("dsi_pr_mean.csv",index_col=0)
             sim_vals = ovals + np.dot(pmat.x,pvals.values)
-            print(sim_vals)
+            #print(sim_vals)
             sim_vals.to_csv("dsi_sim_vals.csv")
 
         self.logger.log("test run")
@@ -590,7 +594,7 @@ class EnDS(object):
         out_file = os.path.join(t_d,"dsi_sim_vals.csv")
         ins_file = out_file + ".ins"
         sdf = pd.read_csv(out_file,index_col=0)
-        print(sdf)
+        #print(sdf)
         with open(ins_file,'w') as f:
             f.write("pif ~\n")
             f.write("l1\n")
@@ -615,7 +619,7 @@ class EnDS(object):
             par.loc[pname, "parlbnd"] = pval - 1000
 
         obs = pst.observation_data
-        print(obs)
+        #print(obs)
         org_obs = self.pst.observation_data
         for col in org_obs.columns:
             obs.loc[org_obs.obsnme,col] = org_obs.loc[:,col]

@@ -27,7 +27,7 @@ if "linux" in platform.platform().lower():
 elif "macos" in platform.platform().lower():
     bin_path = os.path.join(bin_path, "mac")
 else:
-    bin_path = os.path.join(bin_path, "win")
+    bin_path = os.path.join(bin_path, "windows")
 
 exe = ""
 if "windows" in platform.platform().lower():
@@ -430,17 +430,6 @@ def plots_obs_v_sim():
                 # plt.show()
 
 
-def invest():
-    m_d = "daily_model_files_master_prior"
-    pst = pyemu.Pst(os.path.join(m_d,"freyberg.pst"))
-    pe = pyemu.ParameterEnsemble.from_binary(pst=pst,filename=os.path.join(m_d,"prior.jcb"))
-    print(pe.shape,pst.npar)
-    pst.parameter_data.loc[pe.columns.values,"parval1"] = pe._df.loc["0",:]
-    pst.control_data.noptmax = 0
-    pst.write(os.path.join(m_d,"test.pst"))
-    #pyemu.os_utils.run("pestpp-ies test.pst",cwd=m_d)
-    oe = pd.read_csv(os.path.join(m_d,"freyberg.0.obs.csv"),index_col=0)
-    print(oe.loc[:,oe.columns.map(lambda x: "cum_mass_usecol:wel" in x)].mean().values)
 
 
 def test_extract_state_obs(t_d):
@@ -2604,48 +2593,48 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
         if not os.path.exists(s_b_m_d) or not os.path.exists(s_d_m_d):
             break
-        try:
-            s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
-            obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names,:]
-            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
-            #if obs.obsval.max() > 8000:
-            #    continue
+        
 
-            s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
-            #log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
-            #s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+        s_b_pst = pyemu.Pst(os.path.join(s_b_m_d, "freyberg.pst"))
+        obs = s_b_pst.observation_data.loc[s_b_pst.nnz_obs_names,:]
+        obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+        #if obs.obsval.max() > 8000:
+        #    continue
 
-            bpost_iter = s_b_pst.control_data.noptmax
-            if post_iter is not None:
-                bpost_iter = post_iter
-            s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
-                                    index_col=0)
-            #log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
-            #s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
+        s_b_oe_pr = pd.read_csv(os.path.join(s_b_m_d, "freyberg.0.obs.csv"), index_col=0)
+        #log_cols = s_b_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+        #s_b_oe_pr.loc[:,log_cols] = s_b_oe_pr.loc[:,log_cols].apply(np.log10)
+
+        bpost_iter = s_b_pst.control_data.noptmax
+        if post_iter is not None:
+            bpost_iter = post_iter
+        s_b_oe_pt = pd.read_csv(os.path.join(s_b_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                index_col=0)
+        #log_cols = s_b_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+        #s_b_oe_pt.loc[:, log_cols] = s_b_oe_pt.loc[:, log_cols].apply(np.log10)
 
 
-            s_d_pst = pyemu.Pst(os.path.join(s_d_m_d, "freyberg.pst"))
-            obs = s_b_pst.observation_data.loc[s_d_pst.nnz_obs_names, :]
-            obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
-            if obs.obsval.max() > 8000:
-                continue
+        s_d_pst = pyemu.Pst(os.path.join(s_d_m_d, "freyberg.pst"))
+        obs = s_b_pst.observation_data.loc[s_d_pst.nnz_obs_names, :]
+        obs = obs.loc[obs.obsnme.str.contains("sfr_usecol:gage_1")]
+        #if obs.obsval.max() > 8000:
+        #    continue
 
-            s_d_oe_pr = pd.read_csv(os.path.join(s_d_m_d, "freyberg.0.obs.csv"), index_col=0)
-            #log_cols = s_d_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
-            #s_d_oe_pr.loc[:, log_cols] = s_d_oe_pr.loc[:, log_cols].apply(np.log10)
+        s_d_oe_pr = pd.read_csv(os.path.join(s_d_m_d, "freyberg.0.obs.csv"), index_col=0)
+        #log_cols = s_d_oe_pr.columns.map(lambda x: "mass" in x or "cnc" in x)
+        #s_d_oe_pr.loc[:, log_cols] = s_d_oe_pr.loc[:, log_cols].apply(np.log10)
 
-            bpost_iter = s_d_pst.control_data.noptmax
-            if post_iter is not None:
-                bpost_iter = post_iter
-            s_d_oe_pt = pd.read_csv(os.path.join(s_d_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
-                                    index_col=0)
-            #log_cols = s_d_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
-            #s_b_oe_pt.loc[:, log_cols] = s_d_oe_pt.loc[:, log_cols].apply(np.log10)
-            s_b_dict[ireal] = [s_b_pst, s_b_oe_pr, s_b_oe_pt]
-            s_d_dict[ireal] = [s_d_pst, s_d_oe_pr, s_d_oe_pt]
-            print(ireal)
-        except:
-            break
+        bpost_iter = s_d_pst.control_data.noptmax
+        if post_iter is not None:
+            bpost_iter = post_iter
+        s_d_oe_pt = pd.read_csv(os.path.join(s_d_m_d, "freyberg.{0}.obs.csv".format(bpost_iter)),
+                                index_col=0)
+        #log_cols = s_d_oe_pt.columns.map(lambda x: "mass" in x or "cnc" in x)
+        #s_b_oe_pt.loc[:, log_cols] = s_d_oe_pt.loc[:, log_cols].apply(np.log10)
+        s_b_dict[ireal] = [s_b_pst, s_b_oe_pr, s_b_oe_pt]
+        s_d_dict[ireal] = [s_d_pst, s_d_oe_pr, s_d_oe_pt]
+        print(ireal)
+    
 
     #sobs_to_sipar = obs.loc[pd.notna(obs.state_par_link),"state_par_link"].to_dict()
     #par = s_s_pst.parameter_data
@@ -3273,22 +3262,38 @@ def plot_obs_v_sim3(subdir=".",post_iter=None):
 
     pp.close()
 
+def invest():
+    dsi_t_d = "monthly_model_files_master_0"
+    obs_en = "freyberg.0.obs.csv"
+    pst = pyemu.Pst(os.path.join(dsi_t_d, "freyberg.pst"))
+    obs = pst.observation_data
+    forecast_names = []
+    for fore in forecast:
+        fobs = obs.loc[obs.obsnme.str.contains(fore), "obsnme"].to_list()
+        forecast_names.extend(fobs)
+    obs_en = pyemu.ObservationEnsemble.from_csv(pst=pst, filename=os.path.join(dsi_t_d, obs_en))
+    ends = pyemu.EnDS(pst=pst, sim_ensemble=obs_en, predictions=forecast_names)
+    dsi_pst = ends.prep_for_dsi(t_d="test")
+
+
 if __name__ == "__main__":
 
 
+    invest()
+    exit()
     #### MAIN WORKFLOW ####
     #coarse scenario
-    #sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
-    #add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
-    #c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
-    #b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
+    # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
+    # add_new_stress(m_d_org = "monthly_model_files_1lyr_trnsprt")
+    # c_d = setup_interface("daily_model_files_trnsprt_newstress",num_reals=50)
+    # b_d = setup_interface("monthly_model_files_1lyr_trnsprt_newstress",num_reals=50)
 
-    #m_c_d = run_complex_prior_mc(c_d,num_workers=7)
+    # m_c_d = run_complex_prior_mc(c_d,num_workers=7)
     #exit()
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    #compare_mf6_freyberg(num_workers=10, num_replicates=3,num_reals=100,
+    #compare_mf6_freyberg(num_workers=10, num_replicates=30,num_reals=100,
     #                   run_ies=True)
     #exit()
 
