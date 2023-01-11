@@ -522,7 +522,7 @@ class EnDS(object):
         deltad = Matrix.from_dataframe(oe).T
         print(deltad.shape)
         print(deltad.s)
-        print(self.pst.svd_data.maxsing,eigthresh=self.pst.svd_data.eigthresh)
+        print(self.pst.svd_data.maxsing,self.pst.svd_data.eigthresh)
         exit()
         U,S,V = deltad.pseudo_inv_components(maxsing=self.pst.svd_data.maxsing,eigthresh=self.pst.svd_data.eigthresh)
         self.logger.log("pseudo inv of deviations matrix")
