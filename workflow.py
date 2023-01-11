@@ -156,7 +156,7 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         ends = pyemu.EnDS(pst=pst,sim_ensemble=obs_en,predictions=forecast_names)
         dsi_pst = ends.prep_for_dsi(t_d=dsi_t_d)
         dsi_pst.control_data.noptmax = ies_pst.control_data.noptmax
-        dsi_pst.pestpp_options = ies_pst.pestpp_options
+        dsi_pst.pestpp_options["ies_num_reals"] = num_reals
         dsi_pst.write(os.path.join(dsi_t_d,"freyberg.pst"))
         prep_deps(dsi_t_d)
         m_dsi_dir = dsi_t_d.replace("template","master")
