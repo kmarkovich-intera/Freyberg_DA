@@ -515,6 +515,7 @@ class EnDS(object):
         names = z_names.copy()
         names.extend(nz_names)
         names.sort()
+        print(sim_ensemble)
         oe = sim_ensemble.get_deviations() / np.sqrt(float(sim_ensemble.shape[0] - 1))
         oe = oe.loc[:,names]
         print(oe)
