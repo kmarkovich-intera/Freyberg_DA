@@ -517,6 +517,7 @@ class EnDS(object):
         names.sort()
         oe = sim_ensemble.get_deviations() / np.sqrt(float(sim_ensemble.shape[0] - 1))
         oe = oe.loc[:,names]
+        print(oe)
         self.logger.log("getting deviations")
 
         self.logger.log("pseudo inv of deviations matrix")
