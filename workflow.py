@@ -155,7 +155,8 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         obs_en = pyemu.ObservationEnsemble.from_csv(pst=pst,filename=os.path.join(dsi_t_d,obs_en))
         ends = pyemu.EnDS(pst=pst,sim_ensemble=obs_en,predictions=forecast_names)
         dsi_pst = ends.prep_for_dsi(t_d=dsi_t_d)
-        dsi_pst.control_data.noptmax = 3
+        dsi_pst.control_data.noptmax = ies_pst.control_data.noptmax
+        dsi_pst.pestpp_options = ies_pst.pestpp_options
         dsi_pst.write(os.path.join(dsi_t_d,"freyberg.pst"))
         prep_deps(dsi_t_d)
         m_dsi_dir = dsi_t_d.replace("template","master")
@@ -3279,8 +3280,8 @@ def invest():
 if __name__ == "__main__":
 
 
-    invest()
-    exit()
+    #invest()
+    #exit()
     #### MAIN WORKFLOW ####
     #coarse scenario
     # sync_phase(s_d = "monthly_model_files_1lyr_trnsprt_org")
@@ -3293,8 +3294,8 @@ if __name__ == "__main__":
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    #compare_mf6_freyberg(num_workers=10, num_replicates=30,num_reals=100,
-    #                   run_ies=True)
+    compare_mf6_freyberg(num_workers=30, num_replicates=30,num_reals=30,
+                       run_ies=True)
     #exit()
 
     #plot_domain()
