@@ -514,6 +514,7 @@ class EnDS(object):
         z_names = [n for n in self.pst.obs_names if n not in snz_names]
         names = z_names.copy()
         names.extend(nz_names)
+        names.sort()
         oe = sim_ensemble.get_deviations() / np.sqrt(float(sim_ensemble.shape[0] - 1))
         oe = oe.loc[:,names]
         self.logger.log("getting deviations")
