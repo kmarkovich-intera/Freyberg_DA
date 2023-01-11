@@ -3277,6 +3277,69 @@ def invest():
     dsi_pst = ends.prep_for_dsi(t_d="test")
 
 
+def plot_s_vs_s_phi(subdir="."):
+    include_est_states = False
+    
+    # first rip thru all the dirs and load...
+    s_b_dict = {}
+    s_d_dict = {}
+    print("loading results...")
+    mxit = 0
+    for ireal in range(50):
+        s_b_m_d = os.path.join(subdir,"monthly_model_files_master_{0}".format(ireal))
+        s_d_m_d = os.path.join(subdir,"monthly_model_files_master_{0}_dsi".format(ireal))
+
+        if not os.path.exists(s_b_m_d) or not os.path.exists(s_d_m_d):
+            break
+        
+        bphi = pd.read_csv(os.path.join(s_b_m_d,"freyberg.phi.actual.csv"))
+        dphi = pd.read_csv(os.path.join(s_d_m_d,"freyberg.phi.actual.csv"))
+        mxit = max(mxit,bphi.shape[0],dphi.shape[0])
+        
+        
+
+        s_b_dict[ireal] = bphi
+        s_d_dict[ireal] = dphi
+        
+        print(ireal)
+
+    with PdfPages("s_vs_s_phi.pdf") as pdf:
+        for i in range(mxit):
+            fig,ax = plt.subplots(1,1,figsize=(6,4))
+            for ireal,df in s_b_dict.items():
+                bmn = None
+                dmn = None
+                if i < df.shape[0]:
+                    bvals = df.iloc[i,6:].values
+                    bmn = bvals.mean()
+                    [bl,bu] = np.percentile(bvals,[5,95])
+                    
+                    
+                ddf = s_d_dict[ireal]
+                if i < ddf.shape[0]:
+                    dvals = ddf.iloc[i,6:].values
+                    dmn = dvals.mean()
+                    [dl,du] = np.percentile(dvals,[5,95])
+                    
+                if bmn is not None and dmn is not None:
+                    
+                    ax.plot([bmn,bmn],[dl,du],"b-")
+                    ax.plot([bl,bu],[dmn,dmn],"b-")
+                    ax.scatter([bmn],[dmn],marker=".",c="b")
+                    #ax.scatter(bvals,dvals,marker=".")
+            ax.set_xlabel("ies")
+            ax.set_ylabel("dsi")
+            ax.set_title("phi compare iteration {0}".format(i),loc="left")
+            ax.grid()
+            plt.tight_layout()
+            pdf.savefig()
+            plt.close(fig)
+
+
+
+
+
+
 if __name__ == "__main__":
 
 
@@ -3294,13 +3357,14 @@ if __name__ == "__main__":
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    compare_mf6_freyberg(num_workers=30, num_replicates=30,num_reals=30,
-                       run_ies=True)
+    #compare_mf6_freyberg(num_workers=30, num_replicates=30,num_reals=30,
+    #                   run_ies=True)
     #exit()
 
     #plot_domain()
     #plot_obs_v_sim_pub(subdir="missing_wel_pars")
-    plot_s_vs_s_pub(summarize=True)
+    #plot_s_vs_s_pub(summarize=True)
+    plot_s_vs_s_phi()
     #plot_obs_v_sim3()
     exit()
 
