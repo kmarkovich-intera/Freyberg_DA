@@ -51,7 +51,7 @@ keep_dict2 = {k:l for k,l in zip(keep,keep_units)}
 # forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast","cumulative well mass removed",
 #                   "gw conc"]
 forecast = ["oname:sfr_otype:lst_usecol:tailwater","oname:sfr_otype:lst_usecol:headwater","oname:hds_otype:lst_usecol:arrobs_head_k:0_i:9_j:1"]
-forecast_labels = ["tailwater sw-gw exchg","headwater sw-gw exchg","gw forecast"]
+forecast_labels = ["tail swgw exchg","head swgw exchg","gw forecast"]
 forecast_dict = {k:l for k,l in zip(forecast,forecast_labels)}
 forecast_units = ["$\\frac{m^3}{d}$","$\\frac{m^3}{d}$","$m$"]
 forecast_dict2 = {k:l for k,l in zip(forecast,forecast_units)}
@@ -2675,7 +2675,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             #sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
             sgobs.sort_values(by="time", inplace=True)
-            axesall_keep[ikeep,0].set_title("{0}) batch {1}".format(string.ascii_uppercase[ax_count],
+            axesall_keep[ikeep,0].set_title("{0}) IES {1}".format(string.ascii_uppercase[ax_count],
                                                                     label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
@@ -2703,6 +2703,16 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
                     print(ireal,oname,cval)
 
                     if summarize:
+
+                        mn = s_b_oe_pr.loc[:, oname].mean()
+                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+
+                        axesall_keep[ikeep, 0].scatter(mn, cval,
+                                                       marker="o", color="0.5", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                                                    color="0.5", alpha=0.5, lw=lw, zorder=10)
+
                         mn = s_b_oe_pt.loc[:, oname].mean()
                         lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
                         uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
@@ -2722,6 +2732,15 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
                     s_d_pst, s_d_oe_pr, s_d_oe_pt = s_d_dict[ireal]
                     if summarize:
+                        mn = s_d_oe_pr.loc[:, oname].mean()
+                        lq = s_d_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_d_oe_pr.loc[:, oname].quantile(0.95)
+
+                        axesall_keep[ikeep, 1].scatter(mn, cval,
+                                                       marker="o", color="0.5", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                                    color="0.5", alpha=0.5, lw=lw, zorder=10)
+
                         mn = s_d_oe_pt.loc[:, oname].mean()
                         lq = s_d_oe_pt.loc[:, oname].quantile(0.05)
                         uq = s_d_oe_pt.loc[:, oname].quantile(0.95)
@@ -2775,7 +2794,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
             sgobs.sort_values(by="time", inplace=True)
             axesall_keep[ikeep, 0].set_title(
-                "{0}) batch {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+                "{0}) IES {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
                 "{0}) DSI {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
@@ -2802,11 +2821,19 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
                     if summarize:
 
+                        mn = s_b_oe_pr.loc[:, oname].mean()
+                        lq = s_b_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_b_oe_pr.loc[:, oname].quantile(0.95)
+
+                        axesall_keep[ikeep, 0].scatter(mn, cval,
+                                                       marker="o", color="0.5", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
+                                                    color="0.5", alpha=0.5, lw=lw, zorder=10)
+
                         mn = s_b_oe_pt.loc[:, oname].mean()
                         lq = s_b_oe_pt.loc[:, oname].quantile(0.05)
                         uq = s_b_oe_pt.loc[:, oname].quantile(0.95)
 
-                        print(oname,mn,cval)
                         axesall_keep[ikeep, 0].scatter(mn, cval,
                                                        marker="o", color="b", alpha=0.5, s=size, zorder=10)
                         axesall_keep[ikeep, 0].plot([lq, uq], [cval, cval],
@@ -2826,6 +2853,14 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
 
                     s_d_pst, s_d_oe_pr, s_d_oe_pt = s_d_dict[ireal]
                     if summarize:
+
+                        mn = s_d_oe_pr.loc[:, oname].mean()
+                        lq = s_d_oe_pr.loc[:, oname].quantile(0.05)
+                        uq = s_d_oe_pr.loc[:, oname].quantile(0.95)
+                        axesall_keep[ikeep, 1].scatter(mn, cval,
+                                                       marker="o", color="0.5", alpha=0.5, s=size, zorder=10)
+                        axesall_keep[ikeep, 1].plot([lq, uq], [cval, cval],
+                                                    color="0.5", alpha=0.5, lw=lw, zorder=10)
 
                         mn = s_d_oe_pt.loc[:, oname].mean()
                         lq = s_d_oe_pt.loc[:, oname].quantile(0.05)
@@ -3310,25 +3345,31 @@ def plot_s_vs_s_phi(subdir="."):
                 bmn = None
                 dmn = None
                 if i < df.shape[0]:
-                    bvals = df.iloc[i,6:].values
+                    bvals = np.log10(df.iloc[i,6:].values)
                     bmn = bvals.mean()
                     [bl,bu] = np.percentile(bvals,[5,95])
                     
                     
                 ddf = s_d_dict[ireal]
                 if i < ddf.shape[0]:
-                    dvals = ddf.iloc[i,6:].values
+                    dvals = np.log10(ddf.iloc[i,6:].values)
                     dmn = dvals.mean()
                     [dl,du] = np.percentile(dvals,[5,95])
                     
                 if bmn is not None and dmn is not None:
                     
-                    ax.plot([bmn,bmn],[dl,du],"b-")
-                    ax.plot([bl,bu],[dmn,dmn],"b-")
+                    ax.plot([bmn,bmn],[dl,du],"b-",alpha=0.5)
+                    ax.plot([bl,bu],[dmn,dmn],"b-",alpha=0.5)
                     ax.scatter([bmn],[dmn],marker=".",c="b")
                     #ax.scatter(bvals,dvals,marker=".")
-            ax.set_xlabel("ies")
-            ax.set_ylabel("dsi")
+            mx = max(ax.get_xlim()[1],ax.get_ylim()[1])
+            mn = max(ax.get_xlim()[0], ax.get_ylim()[0])
+            ax.set_xlim(mn,mx)
+            ax.set_ylim(mn,mx)
+            ax.set_aspect("equal")
+            ax.plot([mn,mx],[mn,mx],"k--")
+            ax.set_xlabel("ies $log_{10} \\phi$")
+            ax.set_ylabel("dsi $log_{10} \\phi$")
             ax.set_title("phi compare iteration {0}".format(i),loc="left")
             ax.grid()
             plt.tight_layout()
@@ -3363,8 +3404,8 @@ if __name__ == "__main__":
 
     #plot_domain()
     #plot_obs_v_sim_pub(subdir="missing_wel_pars")
-    #plot_s_vs_s_pub(summarize=True)
-    plot_s_vs_s_phi()
+    plot_s_vs_s_pub(summarize=True)
+    #plot_s_vs_s_phi()
     #plot_obs_v_sim3()
     exit()
 
