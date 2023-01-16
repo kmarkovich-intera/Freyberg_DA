@@ -115,17 +115,28 @@ def compare_mf6_freyberg(num_workers=10,num_reals=100,num_replicates=100,use_sim
         ies_pst.pestpp_options["ies_use_mda"] = False
         ies_pst.control_data.noptmax = 3
 
-        #mark the future pars fixed
+        # mark the future pars fixed
         par = ies_pst.parameter_data
-        rch_par = par.loc[par.parnme.str.contains("direct_const_rch_recharge"),:].copy()
-        rch_par.loc[:,"kper"] = rch_par.parnme.apply(lambda x: int(x.split('_')[4]) - 1)
-        rch_par = rch_par.loc[rch_par.kper>=13,"parnme"]
-        par.loc[rch_par,"partrans"] = "fixed"
+        # rch_par = par.loc[par.parnme.str.contains("pname:rch_recharge"),:].copy()
+        # rch_par.loc[:,"kper"] = rch_par.parnme.apply(lambda x: int(x.split('_')[4]) - 1)
+        # rch_par = rch_par.loc[rch_par.kper>=13,"parnme"]
+        # par.loc[rch_par,"partrans"] = "fixed"
 
-        twel_par = par.loc[par.parnme.str.contains("twel_mlt"), :].copy()
-        twel_par.loc[:, "kper"] = twel_par.parnme.apply(lambda x: int(x.split('_')[2]))
-        twel_par = twel_par.loc[twel_par.kper>=13,"parnme"]
-        par.loc[twel_par,"partrans"] = "fixed"
+        # twel_par = par.loc[par.parnme.str.contains("twel_mlt"), :].copy()
+        # twel_par.loc[:, "kper"] = twel_par.parnme.apply(lambda x: int(x.split('_')[2]))
+        # twel_par = twel_par.loc[twel_par.kper>=13,"parnme"]
+        # par.loc[twel_par,"partrans"] = "fixed"
+
+        # test a very low dimen parameterization in model space
+        ies_pst.pestpp_options.pop("ies_par_en")
+        par.loc[:,"partrans"] = "fixed"
+        tag = "layer1_cn_"
+        par.loc[par.parnme.str.contains(tag),"partrans"] = "log"
+
+        #rch_par = par.loc[par.parnme.str.contains("pname:rch_recharge"),"parnme"].to_list()
+        #par.loc[rch_par[0],"partrans"] = "log"
+        #par.loc[rch_par[1:],"partrans"] = "tied"
+        #par.loc[rch_par[1:],"partied"] = rch_par[0]
 
 
         ies_pst.write(os.path.join(ies_t_d, "freyberg.pst"), version=2)
@@ -2675,7 +2686,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             sgobs.loc[:, "time"] = sgobs.time.apply(float)
             #sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
             sgobs.sort_values(by="time", inplace=True)
-            axesall_keep[ikeep,0].set_title("{0}) process model {1}".format(string.ascii_uppercase[ax_count],
+            axesall_keep[ikeep,0].set_title("{0}) PSI {1}".format(string.ascii_uppercase[ax_count],
                                                                     label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
@@ -2794,7 +2805,7 @@ def plot_s_vs_s_pub(summarize=False, subdir=".", post_iter=None):
             # sgobs = sgobs.loc[sgobs.time.apply(lambda x: x > 10000 and x < 10366),:]
             sgobs.sort_values(by="time", inplace=True)
             axesall_keep[ikeep, 0].set_title(
-                "{0}) process model {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
+                "{0}) PSI {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
             ax_count += 1
             axesall_keep[ikeep, 1].set_title(
                 "{0}) DSI {1}".format(string.ascii_uppercase[ax_count], label_dict[ogname]),loc="left")
@@ -3368,7 +3379,7 @@ def plot_s_vs_s_phi(subdir="."):
             ax.set_ylim(mn,mx)
             ax.set_aspect("equal")
             ax.plot([mn,mx],[mn,mx],"k--")
-            ax.set_xlabel("process model $log_{10} \\phi$")
+            ax.set_xlabel("psi $log_{10} \\phi$")
             ax.set_ylabel("dsi $log_{10} \\phi$")
             ax.set_title("phi compare iteration {0}".format(i),loc="left")
             ax.grid()
@@ -3398,8 +3409,8 @@ if __name__ == "__main__":
     #b_d = "monthly_model_files_template"
     #b_d = map_complex_to_simple_bat("daily_model_files_master_prior",b_d,0)
     
-    #compare_mf6_freyberg(num_workers=30, num_replicates=30,num_reals=30,
-    #                   run_ies=True)
+    compare_mf6_freyberg(num_workers=10, num_replicates=30,num_reals=30,
+                       run_ies=True)
     #exit()
 
     #plot_domain()
