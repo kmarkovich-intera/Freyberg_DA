@@ -910,7 +910,7 @@ def process_list_files():
     cdf.fillna(0.0,inplace=True)
     fdf.fillna(0.0,inplace=True)
     fdf.to_csv("inc_flow.dat",sep=" ")
-    fdf.to_csv("cum_flow.dat", sep=" ")
+    cdf.to_csv("cum_flow.dat", sep=" ")
 
     lst = Mf6TListBudget("freyberg6_trns.lst")
     fdf,cdf = lst.get_dataframes(diff=False)
